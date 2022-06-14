@@ -188,6 +188,10 @@ def solve(request, cache_dir):
     arch = request["arch"]
     module_platform_id = request["module_platform_id"]
     arguments = request["arguments"]
+    printe(" (debug) command:", command)
+    printe(" (debug) arch:", arch)
+    printe(" (debug) module_platform_id:", module_platform_id)
+    printe(" (debug) arguments:", arguments)
 
     transactions = arguments.get("transactions")
     with tempfile.TemporaryDirectory() as persistdir:
