@@ -216,11 +216,12 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 						Iterations:  4,
 						Parallelism: 1,
 					},
-					Clevis: &disk.ClevisBind{
-						Pin:              "null",
-						Policy:           "{}",
-						RemovePassphrase: true,
-					},
+					// Clevis: &disk.ClevisBind{
+					// 	Pin:              "null",
+					// 	Policy:           "{}",
+					// 	RemovePassphrase: true,
+					// },
+
 					// Payload: &disk.Filesystem{
 					// 	Type:         "xfs",
 					// 	Label:        "root",
