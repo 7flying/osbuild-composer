@@ -244,12 +244,24 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 								// 	FSTabFreq:    0,
 								// 	FSTabPassNo:  0,
 								// },
-								Size: 11 * 1024 * 1024 * 1024, //10 GB
-								Name: "rootlv",                //previously homelv
+								Size: 2 * 1024 * 1024 * 1024, // 2GB
+								Name: "rootlv",               //previously homelv
 								Payload: &disk.Filesystem{
 									Type:         "xfs",
 									Label:        "root",
 									Mountpoint:   "/",
+									FSTabOptions: "defaults",
+									FSTabFreq:    0,
+									FSTabPassNo:  0,
+								},
+							},
+							{
+								Size: 2 * 1024 * 1024 * 1024, // 2GB
+								Name: "homelv",
+								Payload: &disk.Filesystem{
+									Type:         "xfs",
+									Label:        "root",
+									Mountpoint:   "/home",
 									FSTabOptions: "defaults",
 									FSTabFreq:    0,
 									FSTabPassNo:  0,
