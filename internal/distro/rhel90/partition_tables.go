@@ -244,8 +244,8 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 								// 	FSTabFreq:    0,
 								// 	FSTabPassNo:  0,
 								// },
-								Size: 10 * 1024 * 1024 * 1024, //10 GB
-								Name: "homelv",
+								Size: 11 * 1024 * 1024 * 1024, //10 GB
+								Name: "rootlv",                //previously homelv
 								Payload: &disk.Filesystem{
 									Type:         "xfs",
 									Label:        "root",
