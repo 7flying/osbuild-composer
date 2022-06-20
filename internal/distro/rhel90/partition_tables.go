@@ -219,7 +219,7 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 					Clevis: &disk.ClevisBind{
 						Pin:              "null",
 						Policy:           "{}",
-						RemovePassphrase: true,
+						RemovePassphrase: false,
 					},
 					// Payload: &disk.Filesystem{
 					// 	Type:         "xfs",
