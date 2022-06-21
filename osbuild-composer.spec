@@ -377,7 +377,6 @@ The dnf-json binary used by osbuild-composer and the workers.
 %files dnf-json
 %{_libexecdir}/osbuild-composer/dnf-json
 
-<<<<<<< HEAD
 # %if %{with tests} || 0%{?rhel}
 
 # %package tests
@@ -445,7 +444,7 @@ The dnf-json binary used by osbuild-composer and the workers.
 # %{_datadir}/tests/osbuild-composer/
 
 # %endif
-=======
+
 %if %{with tests} || 0%{?rhel}
 
 %package tests
