@@ -221,29 +221,11 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 						Policy:           "{}",
 						RemovePassphrase: false,
 					},
-					// Payload: &disk.Filesystem{
-					// 	Type:         "xfs",
-					// 	Label:        "root",
-					// 	Mountpoint:   "/",
-					// 	FSTabOptions: "defaults",
-					// 	FSTabFreq:    0,
-					// 	FSTabPassNo:  0,
-					// },
 					Payload: &disk.LVMVolumeGroup{
 						Name:        "rootvg",
 						Description: "built with lvm2 and osbuild",
 						LogicalVolumes: []disk.LVMLogicalVolume{
 							{
-								// Name: "testlg",
-								// Size: 1 * 1024 * 1024 * 1024,
-								// Payload: &disk.Filesystem{
-								// 	Type:         "xfs",
-								// 	Label:        "root",
-								// 	Mountpoint:   "/",
-								// 	FSTabOptions: "defaults",
-								// 	FSTabFreq:    0,
-								// 	FSTabPassNo:  0,
-								// },
 								Size: 2 * 1024 * 1024 * 1024, // 2GB
 								Name: "rootlv",               //previously homelv
 								Payload: &disk.Filesystem{
@@ -255,18 +237,18 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 									FSTabPassNo:  0,
 								},
 							},
-							{
-								Size: 2 * 1024 * 1024 * 1024, // 2GB
-								Name: "homelv",
-								Payload: &disk.Filesystem{
-									Type:         "xfs",
-									Label:        "root",
-									Mountpoint:   "/home",
-									FSTabOptions: "defaults",
-									FSTabFreq:    0,
-									FSTabPassNo:  0,
-								},
-							},
+							// {
+							// 	Size: 2 * 1024 * 1024 * 1024, // 2GB
+							// 	Name: "homelv",
+							// 	Payload: &disk.Filesystem{
+							// 		Type:         "xfs",
+							// 		Label:        "root",
+							// 		Mountpoint:   "/home",
+							// 		FSTabOptions: "defaults",
+							// 		FSTabFreq:    0,
+							// 		FSTabPassNo:  0,
+							// 	},
+							// },
 						},
 					},
 				},
