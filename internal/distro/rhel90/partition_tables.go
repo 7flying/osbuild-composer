@@ -219,7 +219,7 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 					Clevis: &disk.ClevisBind{
 						Pin:              "null",
 						Policy:           "{}",
-						RemovePassphrase: false,
+						RemovePassphrase: true,
 					},
 					Payload: &disk.LVMVolumeGroup{
 						Name:        "rootvg",
