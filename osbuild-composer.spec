@@ -445,76 +445,75 @@ The dnf-json binary used by osbuild-composer and the workers.
 
 # %endif
 
-%if %{with tests} || 0%{?rhel}
+# %if %{with tests} || 0%{?rhel}
 
-%package tests
-Summary:    Integration tests
-%if %{with relax_requires}
-Requires:   %{name}
-%else
-Requires:   %{name} = %{version}-%{release}
-%endif
-Requires:   composer-cli
-Requires:   createrepo_c
-Requires:   xorriso
-Requires:   qemu-kvm-core
-Requires:   systemd-container
-Requires:   jq
-Requires:   unzip
-Requires:   container-selinux
-Requires:   dnsmasq
-Requires:   krb5-workstation
-Requires:   podman
-Requires:   python3
-Requires:   sssd-krb5
-Requires:   libvirt-client libvirt-daemon
-Requires:   libvirt-daemon-config-network
-Requires:   libvirt-daemon-config-nwfilter
-Requires:   libvirt-daemon-driver-interface
-Requires:   libvirt-daemon-driver-network
-Requires:   libvirt-daemon-driver-nodedev
-Requires:   libvirt-daemon-driver-nwfilter
-Requires:   libvirt-daemon-driver-qemu
-Requires:   libvirt-daemon-driver-secret
-Requires:   libvirt-daemon-driver-storage
-Requires:   libvirt-daemon-driver-storage-disk
-Requires:   libvirt-daemon-kvm
-Requires:   qemu-img
-Requires:   qemu-kvm
-Requires:   rpmdevtools
-Requires:   virt-install
-Requires:   expect
-Requires:   python3-lxml
-Requires:   httpd
-Requires:   mod_ssl
-Requires:   openssl
-Requires:   firewalld
-Requires:   podman-plugins
-Requires:   dnf-plugins-core
-Requires:   skopeo
-Requires:   make
-Requires:   python3-pip
-%if 0%{?fedora}
-# koji and ansible are not in RHEL repositories. Depending on them breaks RHEL
-# gating (see OSCI-1541). The test script must enable EPEL and install those
-# packages manually.
-Requires:   koji
-Requires:   ansible
-%endif
-%ifarch %{arm}
-Requires:   edk2-aarch64
-%endif
+# %package tests
+# Summary:    Integration tests
+# %if %{with relax_requires}
+# Requires:   %{name}
+# %else
+# Requires:   %{name} = %{version}-%{release}
+# %endif
+# Requires:   composer-cli
+# Requires:   createrepo_c
+# Requires:   xorriso
+# Requires:   qemu-kvm-core
+# Requires:   systemd-container
+# Requires:   jq
+# Requires:   unzip
+# Requires:   container-selinux
+# Requires:   dnsmasq
+# Requires:   krb5-workstation
+# Requires:   podman
+# Requires:   python3
+# Requires:   sssd-krb5
+# Requires:   libvirt-client libvirt-daemon
+# Requires:   libvirt-daemon-config-network
+# Requires:   libvirt-daemon-config-nwfilter
+# Requires:   libvirt-daemon-driver-interface
+# Requires:   libvirt-daemon-driver-network
+# Requires:   libvirt-daemon-driver-nodedev
+# Requires:   libvirt-daemon-driver-nwfilter
+# Requires:   libvirt-daemon-driver-qemu
+# Requires:   libvirt-daemon-driver-secret
+# Requires:   libvirt-daemon-driver-storage
+# Requires:   libvirt-daemon-driver-storage-disk
+# Requires:   libvirt-daemon-kvm
+# Requires:   qemu-img
+# Requires:   qemu-kvm
+# Requires:   rpmdevtools
+# Requires:   virt-install
+# Requires:   expect
+# Requires:   python3-lxml
+# Requires:   httpd
+# Requires:   mod_ssl
+# Requires:   openssl
+# Requires:   firewalld
+# Requires:   podman-plugins
+# Requires:   dnf-plugins-core
+# Requires:   skopeo
+# Requires:   make
+# Requires:   python3-pip
+# %if 0%{?fedora}
+# # koji and ansible are not in RHEL repositories. Depending on them breaks RHEL
+# # gating (see OSCI-1541). The test script must enable EPEL and install those
+# # packages manually.
+# Requires:   koji
+# Requires:   ansible
+# %endif
+# %ifarch %{arm}
+# Requires:   edk2-aarch64
+# %endif
 
-%description tests
-Integration tests to be run on a pristine-dedicated system to test the osbuild-composer package.
+# %description tests
+# Integration tests to be run on a pristine-dedicated system to test the osbuild-composer package.
 
-%files tests
-%{_libexecdir}/osbuild-composer-test/
-%{_libexecdir}/tests/osbuild-composer/
-%{_datadir}/tests/osbuild-composer/
+# %files tests
+# %{_libexecdir}/osbuild-composer-test/
+# %{_libexecdir}/tests/osbuild-composer/
+# %{_datadir}/tests/osbuild-composer/
 
-%endif
->>>>>>> 4827f0e8 (add cloud-image-val to aws test)
+# %endif
 
 %changelog
 # the changelog is distribution-specific, therefore there's just one entry
