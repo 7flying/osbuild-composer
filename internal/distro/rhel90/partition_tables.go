@@ -209,7 +209,7 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 				UUID: disk.RootPartitionUUID,
 				Size: 5 * 1024 * 1024 * 1024, // previously without this line
 				Payload: &disk.LUKSContainer{
-					Label:      "crypt_root",
+					Label:      "root", //"crypt_root",
 					Cipher:     "cipher_null",
 					Passphrase: "osbuild",
 					PBKDF: disk.Argon2id{
