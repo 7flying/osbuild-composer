@@ -192,16 +192,16 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 				},
 			},
 			{
-				Size: 1024000,                 // 500 MB //402653184, // 384 MB
-				Type: disk.FilesystemDataGUID, //disk.XBootLDRPartitionGUID,
+				Size: 402653184, // 384 MB
+				Type: disk.XBootLDRPartitionGUID,
 				UUID: disk.FilesystemDataUUID,
 				Payload: &disk.Filesystem{
 					Type:         "xfs",
 					Mountpoint:   "/boot",
 					Label:        "boot",
 					FSTabOptions: "defaults",
-					FSTabFreq:    0, //1,
-					FSTabPassNo:  0, // 1,
+					FSTabFreq:    1,
+					FSTabPassNo:  1,
 				},
 			},
 			{
