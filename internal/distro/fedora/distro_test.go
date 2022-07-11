@@ -114,6 +114,14 @@ func TestFilenameFromType(t *testing.T) {
 				mimeType: "application/x-tar",
 			},
 		},
+		{
+			name: "container",
+			args: args{"container"},
+			want: wantResult{
+				filename: "container.tar",
+				mimeType: "application/x-tar",
+			},
+		},
 		// Alias
 		{
 			name: "iot-container",
@@ -231,7 +239,7 @@ func TestImageType_BuildPackages(t *testing.T) {
 					if assert.NoErrorf(t, err, "d.GetArch(%v) returned err = %v; expected nil", archLabel, err) {
 						continue
 					}
-					buildPkgs := itStruct.PackageSets(blueprint.Blueprint{}, nil)["build"]
+					buildPkgs := itStruct.PackageSets(blueprint.Blueprint{}, distro.ImageOptions{}, nil)["build"]
 					assert.NotNil(t, buildPkgs)
 					assert.Len(t, buildPkgs, 1)
 					assert.ElementsMatch(t, buildPackages[archLabel], buildPkgs[0].Include)
@@ -426,6 +434,7 @@ func TestArchitecture_ListImageTypes(t *testing.T) {
 				"fedora-iot-container",
 				"fedora-iot-installer",
 				"oci",
+				"container",
 			},
 		},
 		{
@@ -438,6 +447,7 @@ func TestArchitecture_ListImageTypes(t *testing.T) {
 				"fedora-iot-container",
 				"fedora-iot-installer",
 				"oci",
+				"container",
 			},
 		},
 	}

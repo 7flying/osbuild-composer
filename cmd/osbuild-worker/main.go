@@ -37,6 +37,11 @@ type connectionConfig struct {
 	ClientCertFile string
 }
 
+type kojiServer struct {
+	creds              koji.GSSAPICredentials
+	relaxTimeoutFactor uint
+}
+
 // Represents the implementation of a job type as defined by the worker API.
 type JobImplementation interface {
 	Run(job worker.Job) error
@@ -193,44 +198,6 @@ func RequestAndRunJob(client *worker.Client, acceptedJobTypes []string, jobImpls
 }
 
 func main() {
-	var config struct {
-		Composer *struct {
-			Proxy string `toml:"proxy"`
-		}
-		Koji map[string]struct {
-			Kerberos *struct {
-				Principal string `toml:"principal"`
-				KeyTab    string `toml:"keytab"`
-			} `toml:"kerberos,omitempty"`
-		} `toml:"koji"`
-		GCP *struct {
-			Credentials string `toml:"credentials"`
-		} `toml:"gcp"`
-		Azure *struct {
-			Credentials string `toml:"credentials"`
-		} `toml:"azure"`
-		AWS *struct {
-			Credentials string `toml:"credentials"`
-			Bucket      string `toml:"bucket"`
-		} `toml:"aws"`
-		GenericS3 *struct {
-			Credentials         string `toml:"credentials"`
-			Endpoint            string `toml:"endpoint"`
-			Region              string `toml:"region"`
-			Bucket              string `toml:"bucket"`
-			CABundle            string `toml:"ca_bundle"`
-			SkipSSLVerification bool   `toml:"skip_ssl_verification"`
-		} `toml:"generic_s3"`
-		Authentication *struct {
-			OAuthURL         string `toml:"oauth_url"`
-			OfflineTokenPath string `toml:"offline_token"`
-			ClientId         string `toml:"client_id"`
-			ClientSecretPath string `toml:"client_secret"`
-		} `toml:"authentication"`
-		RelaxTimeoutFactor uint   `toml:"RelaxTimeoutFactor"` // Should be moved under 'koji' section
-		BasePath           string `toml:"base_path"`
-		DNFJson            string `toml:"dnf-json"`
-	}
 	var unix bool
 	flag.BoolVar(&unix, "unix", false, "Interpret 'address' as a path to a unix domain socket instead of a network address")
 
@@ -247,20 +214,16 @@ func main() {
 		os.Exit(2)
 	}
 
-	_, err := toml.DecodeFile(configFile, &config)
-	if err == nil {
-		logrus.Info("Composer configuration:")
-		encoder := toml.NewEncoder(logrus.StandardLogger().WriterLevel(logrus.InfoLevel))
-		err := encoder.Encode(&config)
-		if err != nil {
-			logrus.Fatalf("Could not print config: %v", err)
-		}
-	} else if !os.IsNotExist(err) {
+	config, err := parseConfig(configFile)
+	if err != nil {
 		logrus.Fatalf("Could not load config file '%s': %v", configFile, err)
 	}
 
-	if config.BasePath == "" {
-		config.BasePath = "/api/worker/v1"
+	logrus.Info("Composer configuration:")
+	encoder := toml.NewEncoder(logrus.StandardLogger().WriterLevel(logrus.InfoLevel))
+	err = encoder.Encode(&config)
+	if err != nil {
+		logrus.Fatalf("Could not print config: %v", err)
 	}
 
 	cacheDirectory, ok := os.LookupEnv("CACHE_DIRECTORY")
@@ -272,15 +235,18 @@ func main() {
 	output := path.Join(cacheDirectory, "output")
 	_ = os.Mkdir(output, os.ModeDir)
 
-	kojiServers := make(map[string]koji.GSSAPICredentials)
-	for server, creds := range config.Koji {
-		if creds.Kerberos == nil {
+	kojiServers := make(map[string]kojiServer)
+	for server, kojiConfig := range config.Koji {
+		if kojiConfig.Kerberos == nil {
 			// For now we only support Kerberos authentication.
 			continue
 		}
-		kojiServers[server] = koji.GSSAPICredentials{
-			Principal: creds.Kerberos.Principal,
-			KeyTab:    creds.Kerberos.KeyTab,
+		kojiServers[server] = kojiServer{
+			creds: koji.GSSAPICredentials{
+				Principal: kojiConfig.Kerberos.Principal,
+				KeyTab:    kojiConfig.Kerberos.KeyTab,
+			},
+			relaxTimeoutFactor: kojiConfig.RelaxTimeoutFactor,
 		}
 	}
 
@@ -449,14 +415,13 @@ func main() {
 	// non-depsolve job
 	jobImpls := map[string]JobImplementation{
 		worker.JobTypeOSBuild: &OSBuildJobImpl{
-			Store:                  store,
-			Output:                 output,
-			KojiServers:            kojiServers,
-			KojiRelaxTimeoutFactor: config.RelaxTimeoutFactor,
-			GCPCreds:               gcpCredentials,
-			AzureCreds:             azureCredentials,
-			AWSCreds:               awsCredentials,
-			AWSBucket:              awsBucket,
+			Store:       store,
+			Output:      output,
+			KojiServers: kojiServers,
+			GCPCreds:    gcpCredentials,
+			AzureCreds:  azureCredentials,
+			AWSCreds:    awsCredentials,
+			AWSBucket:   awsBucket,
 			S3Config: S3Configuration{
 				Creds:               genericS3Credentials,
 				Endpoint:            genericS3Endpoint,
@@ -467,18 +432,15 @@ func main() {
 			},
 		},
 		worker.JobTypeOSBuildKoji: &OSBuildKojiJobImpl{
-			Store:              store,
-			Output:             output,
-			KojiServers:        kojiServers,
-			relaxTimeoutFactor: config.RelaxTimeoutFactor,
+			Store:       store,
+			Output:      output,
+			KojiServers: kojiServers,
 		},
 		worker.JobTypeKojiInit: &KojiInitJobImpl{
-			KojiServers:        kojiServers,
-			relaxTimeoutFactor: config.RelaxTimeoutFactor,
+			KojiServers: kojiServers,
 		},
 		worker.JobTypeKojiFinalize: &KojiFinalizeJobImpl{
-			KojiServers:        kojiServers,
-			relaxTimeoutFactor: config.RelaxTimeoutFactor,
+			KojiServers: kojiServers,
 		},
 	}
 

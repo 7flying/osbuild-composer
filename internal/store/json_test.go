@@ -1016,13 +1016,16 @@ func Test_newComposeV0(t *testing.T) {
 						{
 							Uuid:      uuid.MustParse("f53b49c0-d321-447e-8ab8-6e827891e3f0"),
 							ImageName: "",
-							Name:      "org.osbuild.local",
+							Name:      target.TargetNameAWS,
 							Created:   MustParseTime("2020-08-12T09:21:44.427717205-07:00"),
 							Status:    common.IBWaiting,
-							Options: target.LocalTargetOptions{
-								ComposeId:    uuid.MustParse("6b512b52-1e9d-4dac-869c-108fd4860a3e"),
-								ImageBuildId: 0,
-								Filename:     "disk.qcow2",
+							OsbuildArtifact: target.OsbuildArtifact{
+								ExportFilename: "disk.qcow2",
+							},
+							Options: target.AWSTargetOptions{
+								Region: "us-east-1",
+								Bucket: "bucket",
+								Key:    "key",
 							},
 						},
 					},
@@ -1045,13 +1048,16 @@ func Test_newComposeV0(t *testing.T) {
 							{
 								Uuid:      uuid.MustParse("f53b49c0-d321-447e-8ab8-6e827891e3f0"),
 								ImageName: "",
-								Name:      "org.osbuild.local",
+								Name:      target.TargetNameAWS,
 								Created:   MustParseTime("2020-08-12T09:21:44.427717205-07:00"),
 								Status:    common.IBWaiting,
-								Options: target.LocalTargetOptions{
-									ComposeId:    uuid.MustParse("6b512b52-1e9d-4dac-869c-108fd4860a3e"),
-									ImageBuildId: 0,
-									Filename:     "disk.qcow2",
+								OsbuildArtifact: target.OsbuildArtifact{
+									ExportFilename: "disk.qcow2",
+								},
+								Options: target.AWSTargetOptions{
+									Region: "us-east-1",
+									Bucket: "bucket",
+									Key:    "key",
 								},
 							},
 						},
@@ -1118,13 +1124,16 @@ func Test_newComposeFromV0(t *testing.T) {
 							{
 								Uuid:      uuid.MustParse("f53b49c0-d321-447e-8ab8-6e827891e3f0"),
 								ImageName: "",
-								Name:      "org.osbuild.local",
+								Name:      target.TargetNameAWS,
 								Created:   MustParseTime("2020-08-12T09:21:44.427717205-07:00"),
 								Status:    common.IBWaiting,
-								Options: target.LocalTargetOptions{
-									ComposeId:    uuid.MustParse("6b512b52-1e9d-4dac-869c-108fd4860a3e"),
-									ImageBuildId: 0,
-									Filename:     "disk.qcow2",
+								OsbuildArtifact: target.OsbuildArtifact{
+									ExportFilename: "disk.qcow2",
+								},
+								Options: target.AWSTargetOptions{
+									Region: "us-east-1",
+									Bucket: "bucket",
+									Key:    "key",
 								},
 							},
 						},
@@ -1147,13 +1156,16 @@ func Test_newComposeFromV0(t *testing.T) {
 						{
 							Uuid:      uuid.MustParse("f53b49c0-d321-447e-8ab8-6e827891e3f0"),
 							ImageName: "",
-							Name:      "org.osbuild.local",
+							Name:      target.TargetNameAWS,
 							Created:   MustParseTime("2020-08-12T09:21:44.427717205-07:00"),
 							Status:    common.IBWaiting,
-							Options: target.LocalTargetOptions{
-								ComposeId:    uuid.MustParse("6b512b52-1e9d-4dac-869c-108fd4860a3e"),
-								ImageBuildId: 0,
-								Filename:     "disk.qcow2",
+							OsbuildArtifact: target.OsbuildArtifact{
+								ExportFilename: "disk.qcow2",
+							},
+							Options: target.AWSTargetOptions{
+								Region: "us-east-1",
+								Bucket: "bucket",
+								Key:    "key",
 							},
 						},
 					},
@@ -1213,13 +1225,16 @@ func Test_newComposesV0(t *testing.T) {
 							{
 								Uuid:      uuid.MustParse("f53b49c0-d321-447e-8ab8-6e827891e3f0"),
 								ImageName: "",
-								Name:      "org.osbuild.local",
+								Name:      target.TargetNameAWS,
 								Created:   MustParseTime("2020-08-12T09:21:44.427717205-07:00"),
 								Status:    common.IBWaiting,
-								Options: target.LocalTargetOptions{
-									ComposeId:    uuid.MustParse("6b512b52-1e9d-4dac-869c-108fd4860a3e"),
-									ImageBuildId: 0,
-									Filename:     "disk.qcow2",
+								OsbuildArtifact: target.OsbuildArtifact{
+									ExportFilename: "disk.qcow2",
+								},
+								Options: target.AWSTargetOptions{
+									Region: "us-east-1",
+									Bucket: "bucket",
+									Key:    "key",
 								},
 							},
 						},
@@ -1241,13 +1256,16 @@ func Test_newComposesV0(t *testing.T) {
 							{
 								Uuid:      uuid.MustParse("14c454d0-26f3-4a56-8ceb-a5673aaba686"),
 								ImageName: "",
-								Name:      "org.osbuild.local",
+								Name:      target.TargetNameAWS,
 								Created:   MustParseTime("2020-08-12T09:21:44.427717205-07:00"),
 								Status:    common.IBWaiting,
-								Options: target.LocalTargetOptions{
-									ComposeId:    uuid.MustParse("14c454d0-26f3-4a56-8ceb-a5673aaba686"),
-									ImageBuildId: 0,
-									Filename:     "disk.qcow2",
+								OsbuildArtifact: target.OsbuildArtifact{
+									ExportFilename: "disk.qcow2",
+								},
+								Options: target.AWSTargetOptions{
+									Region: "us-east-1",
+									Bucket: "bucket",
+									Key:    "key",
 								},
 							},
 						},
@@ -1264,7 +1282,7 @@ func Test_newComposesV0(t *testing.T) {
 				uuid.MustParse("f53b49c0-d321-447e-8ab8-6e827891e3f0"): {
 					Blueprint: &bp,
 					ImageBuilds: []imageBuildV0{
-						imageBuildV0{
+						{
 							ID:        0,
 							ImageType: test_distro.TestImageTypeName,
 							Manifest:  []byte("JSON MANIFEST GOES HERE"),
@@ -1272,13 +1290,16 @@ func Test_newComposesV0(t *testing.T) {
 								{
 									Uuid:      uuid.MustParse("f53b49c0-d321-447e-8ab8-6e827891e3f0"),
 									ImageName: "",
-									Name:      "org.osbuild.local",
+									Name:      target.TargetNameAWS,
 									Created:   MustParseTime("2020-08-12T09:21:44.427717205-07:00"),
 									Status:    common.IBWaiting,
-									Options: target.LocalTargetOptions{
-										ComposeId:    uuid.MustParse("6b512b52-1e9d-4dac-869c-108fd4860a3e"),
-										ImageBuildId: 0,
-										Filename:     "disk.qcow2",
+									OsbuildArtifact: target.OsbuildArtifact{
+										ExportFilename: "disk.qcow2",
+									},
+									Options: target.AWSTargetOptions{
+										Region: "us-east-1",
+										Bucket: "bucket",
+										Key:    "key",
 									},
 								},
 							},
@@ -1295,7 +1316,7 @@ func Test_newComposesV0(t *testing.T) {
 				uuid.MustParse("14c454d0-26f3-4a56-8ceb-a5673aaba686"): {
 					Blueprint: &bp,
 					ImageBuilds: []imageBuildV0{
-						imageBuildV0{
+						{
 							ID:        0,
 							ImageType: test_distro.TestImageTypeName,
 							Manifest:  []byte("JSON MANIFEST GOES HERE"),
@@ -1303,13 +1324,16 @@ func Test_newComposesV0(t *testing.T) {
 								{
 									Uuid:      uuid.MustParse("14c454d0-26f3-4a56-8ceb-a5673aaba686"),
 									ImageName: "",
-									Name:      "org.osbuild.local",
+									Name:      target.TargetNameAWS,
 									Created:   MustParseTime("2020-08-12T09:21:44.427717205-07:00"),
 									Status:    common.IBWaiting,
-									Options: target.LocalTargetOptions{
-										ComposeId:    uuid.MustParse("14c454d0-26f3-4a56-8ceb-a5673aaba686"),
-										ImageBuildId: 0,
-										Filename:     "disk.qcow2",
+									OsbuildArtifact: target.OsbuildArtifact{
+										ExportFilename: "disk.qcow2",
+									},
+									Options: target.AWSTargetOptions{
+										Region: "us-east-1",
+										Bucket: "bucket",
+										Key:    "key",
 									},
 								},
 							},
@@ -1375,13 +1399,16 @@ func Test_newComposesFromV0(t *testing.T) {
 								{
 									Uuid:      uuid.MustParse("f53b49c0-d321-447e-8ab8-6e827891e3f0"),
 									ImageName: "",
-									Name:      "org.osbuild.local",
+									Name:      target.TargetNameAWS,
 									Created:   MustParseTime("2020-08-12T09:21:44.427717205-07:00"),
 									Status:    common.IBWaiting,
-									Options: target.LocalTargetOptions{
-										ComposeId:    uuid.MustParse("6b512b52-1e9d-4dac-869c-108fd4860a3e"),
-										ImageBuildId: 0,
-										Filename:     "disk.qcow2",
+									OsbuildArtifact: target.OsbuildArtifact{
+										ExportFilename: "disk.qcow2",
+									},
+									Options: target.AWSTargetOptions{
+										Region: "us-east-1",
+										Bucket: "bucket",
+										Key:    "key",
 									},
 								},
 							},
@@ -1405,13 +1432,16 @@ func Test_newComposesFromV0(t *testing.T) {
 								{
 									Uuid:      uuid.MustParse("14c454d0-26f3-4a56-8ceb-a5673aaba686"),
 									ImageName: "",
-									Name:      "org.osbuild.local",
+									Name:      target.TargetNameAWS,
 									Created:   MustParseTime("2020-08-12T09:21:44.427717205-07:00"),
 									Status:    common.IBWaiting,
-									Options: target.LocalTargetOptions{
-										ComposeId:    uuid.MustParse("14c454d0-26f3-4a56-8ceb-a5673aaba686"),
-										ImageBuildId: 0,
-										Filename:     "disk.qcow2",
+									OsbuildArtifact: target.OsbuildArtifact{
+										ExportFilename: "disk.qcow2",
+									},
+									Options: target.AWSTargetOptions{
+										Region: "us-east-1",
+										Bucket: "bucket",
+										Key:    "key",
 									},
 								},
 							},
@@ -1436,13 +1466,16 @@ func Test_newComposesFromV0(t *testing.T) {
 							{
 								Uuid:      uuid.MustParse("f53b49c0-d321-447e-8ab8-6e827891e3f0"),
 								ImageName: "",
-								Name:      "org.osbuild.local",
+								Name:      target.TargetNameAWS,
 								Created:   MustParseTime("2020-08-12T09:21:44.427717205-07:00"),
 								Status:    common.IBWaiting,
-								Options: target.LocalTargetOptions{
-									ComposeId:    uuid.MustParse("6b512b52-1e9d-4dac-869c-108fd4860a3e"),
-									ImageBuildId: 0,
-									Filename:     "disk.qcow2",
+								OsbuildArtifact: target.OsbuildArtifact{
+									ExportFilename: "disk.qcow2",
+								},
+								Options: target.AWSTargetOptions{
+									Region: "us-east-1",
+									Bucket: "bucket",
+									Key:    "key",
 								},
 							},
 						},
@@ -1465,13 +1498,16 @@ func Test_newComposesFromV0(t *testing.T) {
 							{
 								Uuid:      uuid.MustParse("14c454d0-26f3-4a56-8ceb-a5673aaba686"),
 								ImageName: "",
-								Name:      "org.osbuild.local",
+								Name:      target.TargetNameAWS,
 								Created:   MustParseTime("2020-08-12T09:21:44.427717205-07:00"),
 								Status:    common.IBWaiting,
-								Options: target.LocalTargetOptions{
-									ComposeId:    uuid.MustParse("14c454d0-26f3-4a56-8ceb-a5673aaba686"),
-									ImageBuildId: 0,
-									Filename:     "disk.qcow2",
+								OsbuildArtifact: target.OsbuildArtifact{
+									ExportFilename: "disk.qcow2",
+								},
+								Options: target.AWSTargetOptions{
+									Region: "us-east-1",
+									Bucket: "bucket",
+									Key:    "key",
 								},
 							},
 						},
@@ -1527,13 +1563,16 @@ func Test_newImageBuildFromV0(t *testing.T) {
 					{
 						Uuid:      uuid.MustParse("f53b49c0-d321-447e-8ab8-6e827891e3f0"),
 						ImageName: "",
-						Name:      "org.osbuild.local",
+						Name:      target.TargetNameAWS,
 						Created:   MustParseTime("2020-08-12T09:21:44.427717205-07:00"),
 						Status:    common.IBWaiting,
-						Options: target.LocalTargetOptions{
-							ComposeId:    uuid.MustParse("6b512b52-1e9d-4dac-869c-108fd4860a3e"),
-							ImageBuildId: 0,
-							Filename:     "disk.qcow2",
+						OsbuildArtifact: target.OsbuildArtifact{
+							ExportFilename: "disk.qcow2",
+						},
+						Options: target.AWSTargetOptions{
+							Region: "us-east-1",
+							Bucket: "bucket",
+							Key:    "key",
 						},
 					},
 				},
@@ -1552,13 +1591,16 @@ func Test_newImageBuildFromV0(t *testing.T) {
 					{
 						Uuid:      uuid.MustParse("f53b49c0-d321-447e-8ab8-6e827891e3f0"),
 						ImageName: "",
-						Name:      "org.osbuild.local",
+						Name:      target.TargetNameAWS,
 						Created:   MustParseTime("2020-08-12T09:21:44.427717205-07:00"),
 						Status:    common.IBWaiting,
-						Options: target.LocalTargetOptions{
-							ComposeId:    uuid.MustParse("6b512b52-1e9d-4dac-869c-108fd4860a3e"),
-							ImageBuildId: 0,
-							Filename:     "disk.qcow2",
+						OsbuildArtifact: target.OsbuildArtifact{
+							ExportFilename: "disk.qcow2",
+						},
+						Options: target.AWSTargetOptions{
+							Region: "us-east-1",
+							Bucket: "bucket",
+							Key:    "key",
 						},
 					},
 				},

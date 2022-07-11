@@ -4,108 +4,241 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"sort"
-
-	"github.com/osbuild/osbuild-composer/internal/distro"
-	osbuild "github.com/osbuild/osbuild-composer/internal/osbuild1"
-
-	"github.com/google/uuid"
+	"strings"
 
 	"github.com/osbuild/osbuild-composer/internal/blueprint"
+	"github.com/osbuild/osbuild-composer/internal/common"
+	"github.com/osbuild/osbuild-composer/internal/disk"
+	"github.com/osbuild/osbuild-composer/internal/distro"
+	osbuild "github.com/osbuild/osbuild-composer/internal/osbuild2"
+	"github.com/osbuild/osbuild-composer/internal/ostree"
 	"github.com/osbuild/osbuild-composer/internal/rpmmd"
 )
 
-const defaultName = "rhel-8"
-const releaseVersion = "8"
-const modulePlatformID = "platform:el8"
-const ostreeRef = "rhel/8/%s/edge"
+// Returns true if the version represented by the first argument is
+// semantically older than the second.
+// Meant to be used for comparing RHEL versions for differences between minor
+// releases.
+// Evaluates to false if a and b are equal.
+// Assumes any missing components are 0, so 8 < 8.1.
+func versionLessThan(a, b string) bool {
+	aParts := strings.Split(a, ".")
+	bParts := strings.Split(b, ".")
 
-type distribution struct {
-	name             string
-	modulePlatformID string
-	ostreeRef        string
-	arches           map[string]architecture
-	buildPackages    []string
-}
+	// pad shortest argument with zeroes
+	for len(aParts) < len(bParts) {
+		aParts = append(aParts, "0")
+	}
+	for len(bParts) < len(aParts) {
+		bParts = append(bParts, "0")
+	}
 
-type architecture struct {
-	distro             *distribution
-	name               string
-	bootloaderPackages []string
-	buildPackages      []string
-	legacy             string
-	uefi               bool
-	imageTypes         map[string]imageType
-}
-
-type imageType struct {
-	arch             *architecture
-	name             string
-	filename         string
-	mimeType         string
-	packages         []string
-	excludedPackages []string
-	enabledServices  []string
-	disabledServices []string
-	defaultTarget    string
-	kernelOptions    string
-	bootable         bool
-	rpmOstree        bool
-	defaultSize      uint64
-	assembler        func(uefi bool, options distro.ImageOptions, arch distro.Arch, imageSize uint64) *osbuild.Assembler
-}
-
-func removePackage(packages []string, packageToRemove string) []string {
-	for i, pkg := range packages {
-		if pkg == packageToRemove {
-			// override the package with the last one from the list
-			packages[i] = packages[len(packages)-1]
-
-			// drop the last package from the slice
-			return packages[:len(packages)-1]
+	for idx := 0; idx < len(aParts); idx++ {
+		if aParts[idx] < bParts[idx] {
+			return true
+		} else if aParts[idx] > bParts[idx] {
+			return false
 		}
 	}
-	return packages
+
+	// equal
+	return false
 }
 
-func (a *architecture) Distro() distro.Distro {
-	return a.distro
+const (
+	// package set names
+
+	// build package set name
+	buildPkgsKey = "build"
+
+	// main/common os image package set name
+	osPkgsKey = "packages"
+
+	// container package set name
+	containerPkgsKey = "container"
+
+	// installer package set name
+	installerPkgsKey = "installer"
+
+	// blueprint package set name
+	blueprintPkgsKey = "blueprint"
+)
+
+var mountpointAllowList = []string{
+	"/", "/var", "/opt", "/srv", "/usr", "/app", "/data", "/home", "/tmp",
 }
 
-func (t *imageType) Arch() distro.Arch {
-	return t.arch
+type distribution struct {
+	name               string
+	product            string
+	osVersion          string
+	releaseVersion     string
+	modulePlatformID   string
+	vendor             string
+	ostreeRefTmpl      string
+	isolabelTmpl       string
+	runner             string
+	arches             map[string]distro.Arch
+	defaultImageConfig *distro.ImageConfig
+}
+
+// RHEL-based OS image configuration defaults
+var defaultDistroImageConfig = &distro.ImageConfig{
+	Timezone: "America/New_York",
+	Locale:   "en_US.UTF-8",
+	Sysconfig: []*osbuild.SysconfigStageOptions{
+		{
+			Kernel: &osbuild.SysconfigKernelOptions{
+				UpdateDefault: true,
+				DefaultKernel: "kernel",
+			},
+			Network: &osbuild.SysconfigNetworkOptions{
+				Networking: true,
+				NoZeroConf: true,
+			},
+		},
+	},
+}
+
+// distribution objects without the arches > image types
+var distroMap = map[string]distribution{
+	"rhel-8": {
+		name:               "rhel-8",
+		product:            "Red Hat Enterprise Linux",
+		osVersion:          "8.6",
+		releaseVersion:     "8",
+		modulePlatformID:   "platform:el8",
+		vendor:             "redhat",
+		ostreeRefTmpl:      "rhel/8/%s/edge",
+		isolabelTmpl:       "RHEL-8-6-0-BaseOS-%s",
+		runner:             "org.osbuild.rhel86",
+		defaultImageConfig: defaultDistroImageConfig,
+	},
+	"rhel-84": {
+		name:               "rhel-84",
+		product:            "Red Hat Enterprise Linux",
+		osVersion:          "8.4",
+		releaseVersion:     "8",
+		modulePlatformID:   "platform:el8",
+		vendor:             "redhat",
+		ostreeRefTmpl:      "rhel/8/%s/edge",
+		isolabelTmpl:       "RHEL-8-4-0-BaseOS-%s",
+		runner:             "org.osbuild.rhel84",
+		defaultImageConfig: defaultDistroImageConfig,
+	},
+	"rhel-85": {
+		name:               "rhel-85",
+		product:            "Red Hat Enterprise Linux",
+		osVersion:          "8.5",
+		releaseVersion:     "8",
+		modulePlatformID:   "platform:el8",
+		vendor:             "redhat",
+		ostreeRefTmpl:      "rhel/8/%s/edge",
+		isolabelTmpl:       "RHEL-8-5-0-BaseOS-%s",
+		runner:             "org.osbuild.rhel85",
+		defaultImageConfig: defaultDistroImageConfig,
+	},
+	"rhel-86": {
+		name:               "rhel-86",
+		product:            "Red Hat Enterprise Linux",
+		osVersion:          "8.6",
+		releaseVersion:     "8",
+		modulePlatformID:   "platform:el8",
+		vendor:             "redhat",
+		ostreeRefTmpl:      "rhel/8/%s/edge",
+		isolabelTmpl:       "RHEL-8-6-0-BaseOS-%s",
+		runner:             "org.osbuild.rhel86",
+		defaultImageConfig: defaultDistroImageConfig,
+	},
+	"rhel-87": {
+		name:               "rhel-87",
+		product:            "Red Hat Enterprise Linux",
+		osVersion:          "8.7",
+		releaseVersion:     "8",
+		modulePlatformID:   "platform:el8",
+		vendor:             "redhat",
+		ostreeRefTmpl:      "rhel/8/%s/edge",
+		isolabelTmpl:       "RHEL-8-7-0-BaseOS-%s",
+		runner:             "org.osbuild.rhel87",
+		defaultImageConfig: defaultDistroImageConfig,
+	},
+	"centos-8": {
+		name:               "centos-8",
+		product:            "CentOS Stream",
+		osVersion:          "8-stream",
+		releaseVersion:     "8",
+		modulePlatformID:   "platform:el8",
+		vendor:             "centos",
+		ostreeRefTmpl:      "centos/8/%s/edge",
+		isolabelTmpl:       "CentOS-Stream-8-%s-dvd",
+		runner:             "org.osbuild.centos8",
+		defaultImageConfig: defaultDistroImageConfig,
+	},
+}
+
+func (d *distribution) Name() string {
+	return d.name
+}
+
+func (d *distribution) Releasever() string {
+	return d.releaseVersion
+}
+
+func (d *distribution) ModulePlatformID() string {
+	return d.modulePlatformID
+}
+
+func (d *distribution) OSTreeRef() string {
+	return d.ostreeRefTmpl
 }
 
 func (d *distribution) ListArches() []string {
-	archs := make([]string, 0, len(d.arches))
+	archNames := make([]string, 0, len(d.arches))
 	for name := range d.arches {
-		archs = append(archs, name)
+		archNames = append(archNames, name)
 	}
-	sort.Strings(archs)
-	return archs
+	sort.Strings(archNames)
+	return archNames
 }
 
-func (d *distribution) GetArch(arch string) (distro.Arch, error) {
-	a, exists := d.arches[arch]
+func (d *distribution) GetArch(name string) (distro.Arch, error) {
+	arch, exists := d.arches[name]
 	if !exists {
-		return nil, errors.New("invalid architecture: " + arch)
+		return nil, errors.New("invalid architecture: " + name)
 	}
-
-	return &a, nil
+	return arch, nil
 }
 
-func (d *distribution) setArches(arches ...architecture) {
-	d.arches = map[string]architecture{}
-	for _, a := range arches {
-		d.arches[a.name] = architecture{
-			distro:             d,
-			name:               a.name,
-			bootloaderPackages: a.bootloaderPackages,
-			buildPackages:      a.buildPackages,
-			uefi:               a.uefi,
-			imageTypes:         a.imageTypes,
-		}
+func (d *distribution) addArches(arches ...architecture) {
+	if d.arches == nil {
+		d.arches = map[string]distro.Arch{}
 	}
+
+	// Do not make copies of architectures, as opposed to image types,
+	// because architecture definitions are not used by more than a single
+	// distro definition.
+	for idx := range arches {
+		d.arches[arches[idx].name] = &arches[idx]
+	}
+}
+
+func (d *distribution) isRHEL() bool {
+	return strings.HasPrefix(d.name, "rhel")
+}
+
+func (d *distribution) getDefaultImageConfig() *distro.ImageConfig {
+	return d.defaultImageConfig
+}
+
+type architecture struct {
+	distro           *distribution
+	name             string
+	imageTypes       map[string]distro.ImageType
+	imageTypeAliases map[string]string
+	legacy           string
+	bootType         distro.BootType
 }
 
 func (a *architecture) Name() string {
@@ -113,47 +246,91 @@ func (a *architecture) Name() string {
 }
 
 func (a *architecture) ListImageTypes() []string {
-	formats := make([]string, 0, len(a.imageTypes))
+	itNames := make([]string, 0, len(a.imageTypes))
 	for name := range a.imageTypes {
-		formats = append(formats, name)
+		itNames = append(itNames, name)
 	}
-	sort.Strings(formats)
-	return formats
+	sort.Strings(itNames)
+	return itNames
 }
 
-func (a *architecture) GetImageType(imageType string) (distro.ImageType, error) {
-	t, exists := a.imageTypes[imageType]
+func (a *architecture) GetImageType(name string) (distro.ImageType, error) {
+	t, exists := a.imageTypes[name]
 	if !exists {
-		return nil, errors.New("invalid image type: " + imageType)
+		aliasForName, exists := a.imageTypeAliases[name]
+		if !exists {
+			return nil, errors.New("invalid image type: " + name)
+		}
+		t, exists = a.imageTypes[aliasForName]
+		if !exists {
+			panic(fmt.Sprintf("image type '%s' is an alias to a non-existing image type '%s'", name, aliasForName))
+		}
 	}
-
-	return &t, nil
+	return t, nil
 }
 
-func (a *architecture) setImageTypes(imageTypes ...imageType) {
-	a.imageTypes = map[string]imageType{}
-	for _, it := range imageTypes {
-		a.imageTypes[it.name] = imageType{
-			arch:             a,
-			name:             it.name,
-			filename:         it.filename,
-			mimeType:         it.mimeType,
-			packages:         it.packages,
-			excludedPackages: it.excludedPackages,
-			enabledServices:  it.enabledServices,
-			disabledServices: it.disabledServices,
-			defaultTarget:    it.defaultTarget,
-			kernelOptions:    it.kernelOptions,
-			bootable:         it.bootable,
-			rpmOstree:        it.rpmOstree,
-			defaultSize:      it.defaultSize,
-			assembler:        it.assembler,
+func (a *architecture) addImageTypes(imageTypes ...imageType) {
+	if a.imageTypes == nil {
+		a.imageTypes = map[string]distro.ImageType{}
+	}
+	for idx := range imageTypes {
+		it := imageTypes[idx]
+		it.arch = a
+		a.imageTypes[it.name] = &it
+		for _, alias := range it.nameAliases {
+			if a.imageTypeAliases == nil {
+				a.imageTypeAliases = map[string]string{}
+			}
+			if existingAliasFor, exists := a.imageTypeAliases[alias]; exists {
+				panic(fmt.Sprintf("image type alias '%s' for '%s' is already defined for another image type '%s'", alias, it.name, existingAliasFor))
+			}
+			a.imageTypeAliases[alias] = it.name
 		}
 	}
 }
 
+func (a *architecture) Distro() distro.Distro {
+	return a.distro
+}
+
+type pipelinesFunc func(t *imageType, customizations *blueprint.Customizations, options distro.ImageOptions, repos []rpmmd.RepoConfig, packageSetSpecs map[string][]rpmmd.PackageSpec, rng *rand.Rand) ([]osbuild.Pipeline, error)
+
+type packageSetFunc func(t *imageType) rpmmd.PackageSet
+
+type imageType struct {
+	arch               *architecture
+	name               string
+	nameAliases        []string
+	filename           string
+	mimeType           string
+	packageSets        map[string]packageSetFunc
+	packageSetChains   map[string][]string
+	defaultImageConfig *distro.ImageConfig
+	kernelOptions      string
+	defaultSize        uint64
+	buildPipelines     []string
+	payloadPipelines   []string
+	exports            []string
+	pipelines          pipelinesFunc
+
+	// bootISO: installable ISO
+	bootISO bool
+	// rpmOstree: edge/ostree
+	rpmOstree bool
+	// bootable image
+	bootable bool
+	// If set to a value, it is preferred over the architecture value
+	bootType distro.BootType
+	// List of valid arches for the image type
+	basePartitionTables distro.BasePartitionTableMap
+}
+
 func (t *imageType) Name() string {
 	return t.name
+}
+
+func (t *imageType) Arch() distro.Arch {
+	return t.arch
 }
 
 func (t *imageType) Filename() string {
@@ -165,8 +342,9 @@ func (t *imageType) MIMEType() string {
 }
 
 func (t *imageType) OSTreeRef() string {
+	d := t.arch.distro
 	if t.rpmOstree {
-		return fmt.Sprintf(ostreeRef, t.Arch().Name())
+		return fmt.Sprintf(d.ostreeRefTmpl, t.Arch().Name())
 	}
 	return ""
 }
@@ -183,989 +361,1571 @@ func (t *imageType) Size(size uint64) uint64 {
 	return size
 }
 
-func (t *imageType) PartitionType() string {
-	return ""
+func (t *imageType) getPackages(name string) rpmmd.PackageSet {
+	getter := t.packageSets[name]
+	if getter == nil {
+		return rpmmd.PackageSet{}
+	}
+
+	return getter(t)
 }
 
-func (t *imageType) Packages(bp blueprint.Blueprint) ([]string, []string) {
-	packages := append(t.packages, bp.GetPackages()...)
+func (t *imageType) PackageSets(bp blueprint.Blueprint, options distro.ImageOptions, repos []rpmmd.RepoConfig) map[string][]rpmmd.PackageSet {
+	// merge package sets that appear in the image type with the package sets
+	// of the same name from the distro and arch
+	mergedSets := make(map[string]rpmmd.PackageSet)
+
+	imageSets := t.packageSets
+
+	for name := range imageSets {
+		mergedSets[name] = t.getPackages(name)
+	}
+
+	if _, hasPackages := imageSets[osPkgsKey]; !hasPackages {
+		// should this be possible??
+		mergedSets[osPkgsKey] = rpmmd.PackageSet{}
+	}
+
+	// every image type must define a 'build' package set
+	if _, hasBuild := imageSets[buildPkgsKey]; !hasBuild {
+		panic(fmt.Sprintf("'%s' image type has no '%s' package set defined", t.name, buildPkgsKey))
+	}
+
+	// blueprint packages
+	bpPackages := bp.GetPackages()
 	timezone, _ := bp.Customizations.GetTimezoneSettings()
 	if timezone != nil {
-		packages = append(packages, "chrony")
-	}
-	if t.bootable {
-		packages = append(packages, t.arch.bootloaderPackages...)
+		bpPackages = append(bpPackages, "chrony")
 	}
 
-	// copy the list of excluded packages from the image type
-	// and subtract any packages found in the blueprint (this
-	// will not handle the issue with dependencies present in
-	// the list of excluded packages, but it will create a
-	// possibility of a workaround at least)
-	excludedPackages := append([]string(nil), t.excludedPackages...)
-	for _, pkg := range bp.GetPackages() {
-		// removePackage is fine if the package doesn't exist
-		excludedPackages = removePackage(excludedPackages, pkg)
+	// if we have file system customization that will need to a new mount point
+	// the layout is converted to LVM so we need to corresponding packages
+	if !t.rpmOstree {
+		archName := t.arch.Name()
+		pt := t.basePartitionTables[archName]
+		haveNewMountpoint := false
+
+		if fs := bp.Customizations.GetFilesystems(); fs != nil {
+			for i := 0; !haveNewMountpoint && i < len(fs); i++ {
+				haveNewMountpoint = !pt.ContainsMountpoint(fs[i].Mountpoint)
+			}
+		}
+
+		if haveNewMountpoint {
+			bpPackages = append(bpPackages, "lvm2")
+		}
 	}
 
-	return packages, excludedPackages
-}
+	// depsolve bp packages separately
+	// bp packages aren't restricted by exclude lists
+	mergedSets[blueprintPkgsKey] = rpmmd.PackageSet{Include: bpPackages}
+	kernel := bp.Customizations.GetKernel().Name
 
-func (t *imageType) BuildPackages() []string {
-	packages := append(t.arch.distro.buildPackages, t.arch.buildPackages...)
-	if t.rpmOstree {
-		packages = append(packages, "rpm-ostree")
-	}
-	return packages
-}
+	// add bp kernel to main OS package set to avoid duplicate kernels
+	mergedSets[osPkgsKey] = mergedSets[osPkgsKey].Append(rpmmd.PackageSet{Include: []string{kernel}})
 
-func (t *imageType) PackageSets(bp blueprint.Blueprint, repos []rpmmd.RepoConfig) map[string][]rpmmd.PackageSet {
-	includePackages, excludePackages := t.Packages(bp)
-	return map[string][]rpmmd.PackageSet{
-		"packages": {{
-			Include:      includePackages,
-			Exclude:      excludePackages,
-			Repositories: repos,
-		}},
-		"build-packages": {{
-			Include:      t.BuildPackages(),
-			Repositories: repos,
-		}},
-	}
+	return distro.MakePackageSetChains(t, mergedSets, repos)
 }
 
 func (t *imageType) BuildPipelines() []string {
-	return distro.BuildPipelinesFallback()
+	return t.buildPipelines
 }
 
 func (t *imageType) PayloadPipelines() []string {
-	return distro.PayloadPipelinesFallback()
+	return t.payloadPipelines
 }
 
 func (t *imageType) PayloadPackageSets() []string {
-	return []string{"packages"}
+	return []string{blueprintPkgsKey}
 }
 
 func (t *imageType) PackageSetsChains() map[string][]string {
-	return map[string][]string{}
+	return t.packageSetChains
 }
 
 func (t *imageType) Exports() []string {
-	return distro.ExportsFallback()
+	if len(t.exports) > 0 {
+		return t.exports
+	}
+	return []string{"assembler"}
 }
 
-func (t *imageType) Manifest(c *blueprint.Customizations,
+// getBootType returns the BootType which should be used for this particular
+// combination of architecture and image type.
+func (t *imageType) getBootType() distro.BootType {
+	bootType := t.arch.bootType
+	if t.bootType != distro.UnsetBootType {
+		bootType = t.bootType
+	}
+	return bootType
+}
+
+func (t *imageType) supportsUEFI() bool {
+	bootType := t.getBootType()
+	if bootType == distro.HybridBootType || bootType == distro.UEFIBootType {
+		return true
+	}
+	return false
+}
+
+func (t *imageType) getPartitionTable(
+	mountpoints []blueprint.FilesystemCustomization,
+	options distro.ImageOptions,
+	rng *rand.Rand,
+) (*disk.PartitionTable, error) {
+	archName := t.arch.Name()
+
+	basePartitionTable, exists := t.basePartitionTables[archName]
+
+	if !exists {
+		return nil, fmt.Errorf("unknown arch: " + archName)
+	}
+
+	imageSize := t.Size(options.Size)
+
+	lvmify := !t.rpmOstree
+
+	return disk.NewPartitionTable(&basePartitionTable, mountpoints, imageSize, lvmify, rng)
+}
+
+func (t *imageType) getDefaultImageConfig() *distro.ImageConfig {
+	// ensure that image always returns non-nil default config
+	imageConfig := t.defaultImageConfig
+	if imageConfig == nil {
+		imageConfig = &distro.ImageConfig{}
+	}
+	return imageConfig.InheritFrom(t.arch.distro.getDefaultImageConfig())
+
+}
+
+func (t *imageType) PartitionType() string {
+	archName := t.arch.Name()
+	basePartitionTable, exists := t.basePartitionTables[archName]
+	if !exists {
+		return ""
+	}
+
+	return basePartitionTable.Type
+}
+
+func (t *imageType) Manifest(customizations *blueprint.Customizations,
 	options distro.ImageOptions,
 	repos []rpmmd.RepoConfig,
 	packageSpecSets map[string][]rpmmd.PackageSpec,
 	seed int64) (distro.Manifest, error) {
-	pipeline, err := t.pipeline(c, options, repos, packageSpecSets["packages"], packageSpecSets["build-packages"])
+
+	if err := t.checkOptions(customizations, options); err != nil {
+		return distro.Manifest{}, err
+	}
+
+	source := rand.NewSource(seed)
+	// math/rand is good enough in this case
+	/* #nosec G404 */
+	rng := rand.New(source)
+
+	pipelines, err := t.pipelines(t, customizations, options, repos, packageSpecSets, rng)
 	if err != nil {
 		return distro.Manifest{}, err
 	}
 
+	// flatten spec sets for sources
+	allPackageSpecs := make([]rpmmd.PackageSpec, 0)
+	for _, specs := range packageSpecSets {
+		allPackageSpecs = append(allPackageSpecs, specs...)
+	}
+
+	// handle OSTree commit inputs
+	var commits []ostree.CommitSource
+	if options.OSTree.Parent != "" && options.OSTree.URL != "" {
+		commits = []ostree.CommitSource{{Checksum: options.OSTree.Parent, URL: options.OSTree.URL}}
+	}
+
+	// handle inline sources
+	inlineData := []string{}
+
+	// FDO root certs, if any, are transmitted via an inline source
+	if fdo := customizations.GetFDO(); fdo != nil && fdo.DiunPubKeyRootCerts != "" {
+		inlineData = append(inlineData, fdo.DiunPubKeyRootCerts)
+	}
+
 	return json.Marshal(
 		osbuild.Manifest{
-			Sources:  *sources(append(packageSpecSets["packages"], packageSpecSets["build-packages"]...)),
-			Pipeline: *pipeline,
+			Version:   "2",
+			Pipelines: pipelines,
+			Sources:   osbuild.GenSources(allPackageSpecs, commits, inlineData),
 		},
 	)
 }
 
-func (d *distribution) Name() string {
-	return d.name
-}
-
-func (d *distribution) Releasever() string {
-	return releaseVersion
-}
-
-func (d *distribution) ModulePlatformID() string {
-	return d.modulePlatformID
-}
-
-func (d *distribution) OSTreeRef() string {
-	return d.ostreeRef
-}
-
-func sources(packages []rpmmd.PackageSpec) *osbuild.Sources {
-	files := &osbuild.FilesSource{
-		URLs: make(map[string]osbuild.FileSource),
-	}
-	for _, pkg := range packages {
-		fileSource := osbuild.FileSource{
-			URL: pkg.RemoteLocation,
+// checkOptions checks the validity and compatibility of options and customizations for the image type.
+func (t *imageType) checkOptions(customizations *blueprint.Customizations, options distro.ImageOptions) error {
+	if t.bootISO && t.rpmOstree {
+		if options.OSTree.Parent == "" {
+			return fmt.Errorf("boot ISO image type %q requires specifying a URL from which to retrieve the OSTree commit", t.name)
 		}
-		if pkg.Secrets == "org.osbuild.rhsm" {
-			fileSource.Secrets = &osbuild.Secret{
-				Name: "org.osbuild.rhsm",
+
+		if t.name == "edge-simplified-installer" {
+			allowed := []string{"InstallationDevice", "FDO"}
+			if err := customizations.CheckAllowed(allowed...); err != nil {
+				return fmt.Errorf("unsupported blueprint customizations found for boot ISO image type %q: (allowed: %s)", t.name, strings.Join(allowed, ", "))
+			}
+			if customizations.GetInstallationDevice() == "" {
+				return fmt.Errorf("boot ISO image type %q requires specifying an installation device to install to", t.name)
+			}
+			if customizations.GetFDO() == nil {
+				return fmt.Errorf("boot ISO image type %q requires specifying FDO configuration to install to", t.name)
+			}
+			if customizations.GetFDO().ManufacturingServerURL == "" {
+				return fmt.Errorf("boot ISO image type %q requires specifying FDO.ManufacturingServerURL configuration to install to", t.name)
+			}
+			var diunSet int
+			if customizations.GetFDO().DiunPubKeyHash != "" {
+				diunSet++
+			}
+			if customizations.GetFDO().DiunPubKeyInsecure != "" {
+				diunSet++
+			}
+			if customizations.GetFDO().DiunPubKeyRootCerts != "" {
+				diunSet++
+			}
+			if diunSet != 1 {
+				return fmt.Errorf("boot ISO image type %q requires specifying one of [FDO.DiunPubKeyHash,FDO.DiunPubKeyInsecure,FDO.DiunPubKeyRootCerts] configuration to install to", t.name)
+			}
+		} else if t.name == "edge-installer" {
+			allowed := []string{"User", "Group"}
+			if err := customizations.CheckAllowed(allowed...); err != nil {
+				return fmt.Errorf("unsupported blueprint customizations found for boot ISO image type %q: (allowed: %s)", t.name, strings.Join(allowed, ", "))
 			}
 		}
-		files.URLs[pkg.Checksum] = fileSource
-	}
-	return &osbuild.Sources{
-		"org.osbuild.files": files,
-	}
-}
-
-func (t *imageType) pipeline(c *blueprint.Customizations, options distro.ImageOptions, repos []rpmmd.RepoConfig, packageSpecs, buildPackageSpecs []rpmmd.PackageSpec) (*osbuild.Pipeline, error) {
-
-	// if options.Size is 0, this will be the default size of the image type
-	imageSize := t.Size(options.Size)
-
-	if kernelOpts := c.GetKernel(); kernelOpts != nil && kernelOpts.Append != "" && t.rpmOstree {
-		return nil, fmt.Errorf("kernel boot parameter customizations are not supported for ostree types")
 	}
 
-	mountpoints := c.GetFilesystems()
+	if t.name == "edge-raw-image" && options.OSTree.Parent == "" {
+		return fmt.Errorf("edge raw images require specifying a URL from which to retrieve the OSTree commit")
+	}
+
+	if kernelOpts := customizations.GetKernel(); kernelOpts.Append != "" && t.rpmOstree && (!t.bootable || t.bootISO) {
+		return fmt.Errorf("kernel boot parameter customizations are not supported for ostree types")
+	}
+
+	mountpoints := customizations.GetFilesystems()
 
 	if mountpoints != nil && t.rpmOstree {
-		return nil, fmt.Errorf("Custom mountpoints are not supported for ostree types")
+		return fmt.Errorf("Custom mountpoints are not supported for ostree types")
 	}
 
-	// create a slice for storing
-	// invalid mountpoints in order to return
-	// a detailed message
 	invalidMountpoints := []string{}
 	for _, m := range mountpoints {
-		if m.Mountpoint != "/" {
+		if !distro.IsMountpointAllowed(m.Mountpoint, mountpointAllowList) {
 			invalidMountpoints = append(invalidMountpoints, m.Mountpoint)
-		} else {
-			if m.MinSize > imageSize {
-				imageSize = m.MinSize
-			}
 		}
 	}
 
 	if len(invalidMountpoints) > 0 {
-		return nil, fmt.Errorf("The following custom mountpoints are not supported %+q", invalidMountpoints)
+		return fmt.Errorf("The following custom mountpoints are not supported %+q", invalidMountpoints)
 	}
 
-	p := &osbuild.Pipeline{}
-	p.SetBuild(t.buildPipeline(repos, *t.arch, buildPackageSpecs), "org.osbuild.rhel82")
-
-	if t.arch.Name() == distro.S390xArchName {
-		p.AddStage(osbuild.NewKernelCmdlineStage(&osbuild.KernelCmdlineStageOptions{
-			RootFsUUID: "0bd700f8-090f-4556-b797-b340297ea1bd",
-			KernelOpts: "net.ifnames=0 crashkernel=auto",
-		}))
-	}
-
-	p.AddStage(osbuild.NewRPMStage(t.rpmStageOptions(*t.arch, repos, packageSpecs)))
-	p.AddStage(osbuild.NewFixBLSStage())
-
-	if t.bootable {
-		p.AddStage(osbuild.NewFSTabStage(t.fsTabStageOptions(t.arch.uefi)))
-		if t.arch.Name() != distro.S390xArchName {
-			p.AddStage(osbuild.NewGRUB2Stage(t.grub2StageOptions(t.kernelOptions, c.GetKernel(), t.arch.uefi)))
-		}
-	}
-
-	// TODO support setting all languages and install corresponding langpack-* package
-	language, keyboard := c.GetPrimaryLocale()
-
-	if language != nil {
-		p.AddStage(osbuild.NewLocaleStage(&osbuild.LocaleStageOptions{Language: *language}))
-	} else {
-		p.AddStage(osbuild.NewLocaleStage(&osbuild.LocaleStageOptions{Language: "en_US"}))
-	}
-
-	if keyboard != nil {
-		p.AddStage(osbuild.NewKeymapStage(&osbuild.KeymapStageOptions{Keymap: *keyboard}))
-	}
-
-	if hostname := c.GetHostname(); hostname != nil {
-		p.AddStage(osbuild.NewHostnameStage(&osbuild.HostnameStageOptions{Hostname: *hostname}))
-	}
-
-	timezone, ntpServers := c.GetTimezoneSettings()
-
-	if timezone != nil {
-		p.AddStage(osbuild.NewTimezoneStage(&osbuild.TimezoneStageOptions{Zone: *timezone}))
-	}
-
-	if len(ntpServers) > 0 {
-		p.AddStage(osbuild.NewChronyStage(&osbuild.ChronyStageOptions{Timeservers: ntpServers}))
-	}
-
-	if groups := c.GetGroups(); len(groups) > 0 {
-		p.AddStage(osbuild.NewGroupsStage(osbuild.NewGroupsStageOptions(groups)))
-	}
-
-	if userOptions, err := osbuild.NewUsersStageOptions(c.GetUsers()); err != nil {
-		return nil, err
-	} else if userOptions != nil {
-		p.AddStage(osbuild.NewUsersStage(userOptions))
-	}
-
-	if services := c.GetServices(); services != nil || t.enabledServices != nil || t.disabledServices != nil || t.defaultTarget != "" {
-		p.AddStage(osbuild.NewSystemdStage(t.systemdStageOptions(t.enabledServices, t.disabledServices, services, t.defaultTarget)))
-	}
-
-	if firewall := c.GetFirewall(); firewall != nil {
-		p.AddStage(osbuild.NewFirewallStage(t.firewallStageOptions(firewall)))
-	}
-
-	if t.arch.Name() == distro.S390xArchName {
-		p.AddStage(osbuild.NewZiplStage(&osbuild.ZiplStageOptions{}))
-	}
-
-	p.AddStage(osbuild.NewSELinuxStage(t.selinuxStageOptions()))
-
-	if t.rpmOstree {
-		p.AddStage(osbuild.NewRPMOSTreeStage(&osbuild.RPMOSTreeStageOptions{
-			EtcGroupMembers: []string{
-				// NOTE: We may want to make this configurable.
-				"wheel", "docker",
-			},
-		}))
-	}
-
-	if options.Subscription != nil {
-		commands := []string{
-			fmt.Sprintf("/usr/sbin/subscription-manager register --org=%s --activationkey=%s --serverurl %s --baseurl %s", options.Subscription.Organization, options.Subscription.ActivationKey, options.Subscription.ServerUrl, options.Subscription.BaseUrl),
-		}
-		if options.Subscription.Insights {
-			commands = append(commands, "/usr/bin/insights-client --register")
-		}
-
-		p.AddStage(osbuild.NewFirstBootStage(&osbuild.FirstBootStageOptions{
-			Commands:       commands,
-			WaitForNetwork: true,
-		},
-		))
-	} else {
-		// RHSM DNF plugins should be by default disabled on RHEL Guest KVM images
-		if t.Name() == "qcow2" {
-			p.AddStage(osbuild.NewRHSMStage(&osbuild.RHSMStageOptions{
-				DnfPlugins: &osbuild.RHSMStageOptionsDnfPlugins{
-					ProductID: &osbuild.RHSMStageOptionsDnfPlugin{
-						Enabled: false,
-					},
-					SubscriptionManager: &osbuild.RHSMStageOptionsDnfPlugin{
-						Enabled: false,
-					},
-				},
-			}))
-		}
-	}
-
-	p.Assembler = t.assembler(t.arch.uefi, options, t.arch, imageSize)
-
-	return p, nil
-}
-
-func (t *imageType) buildPipeline(repos []rpmmd.RepoConfig, arch architecture, buildPackageSpecs []rpmmd.PackageSpec) *osbuild.Pipeline {
-	p := &osbuild.Pipeline{}
-	p.AddStage(osbuild.NewRPMStage(t.rpmStageOptions(arch, repos, buildPackageSpecs)))
-	p.AddStage(osbuild.NewSELinuxStage(t.selinuxStageOptions()))
-	return p
-}
-
-func (t *imageType) rpmStageOptions(arch architecture, repos []rpmmd.RepoConfig, specs []rpmmd.PackageSpec) *osbuild.RPMStageOptions {
-	var gpgKeys []string
-	for _, repo := range repos {
-		if repo.GPGKey == "" {
-			continue
-		}
-		gpgKeys = append(gpgKeys, repo.GPGKey)
-	}
-
-	var packages []osbuild.RPMPackage
-	for _, spec := range specs {
-		pkg := osbuild.RPMPackage{
-			Checksum: spec.Checksum,
-			CheckGPG: spec.CheckGPG,
-		}
-		packages = append(packages, pkg)
-	}
-
-	return &osbuild.RPMStageOptions{
-		GPGKeys:  gpgKeys,
-		Packages: packages,
-	}
-}
-
-func (t *imageType) firewallStageOptions(firewall *blueprint.FirewallCustomization) *osbuild.FirewallStageOptions {
-	options := osbuild.FirewallStageOptions{
-		Ports: firewall.Ports,
-	}
-
-	if firewall.Services != nil {
-		options.EnabledServices = firewall.Services.Enabled
-		options.DisabledServices = firewall.Services.Disabled
-	}
-
-	return &options
-}
-
-func (t *imageType) systemdStageOptions(enabledServices, disabledServices []string, s *blueprint.ServicesCustomization, target string) *osbuild.SystemdStageOptions {
-	if s != nil {
-		enabledServices = append(enabledServices, s.Enabled...)
-		disabledServices = append(disabledServices, s.Disabled...)
-	}
-	return &osbuild.SystemdStageOptions{
-		EnabledServices:  enabledServices,
-		DisabledServices: disabledServices,
-		DefaultTarget:    target,
-	}
-}
-
-func (t *imageType) fsTabStageOptions(uefi bool) *osbuild.FSTabStageOptions {
-	options := osbuild.FSTabStageOptions{}
-	options.AddFilesystem("0bd700f8-090f-4556-b797-b340297ea1bd", "xfs", "/", "defaults", 0, 0)
-	if uefi {
-		options.AddFilesystem("46BB-8120", "vfat", "/boot/efi", "umask=0077,shortname=winnt", 0, 2)
-	}
-	return &options
-}
-
-func (t *imageType) grub2StageOptions(kernelOptions string, kernel *blueprint.KernelCustomization, uefi bool) *osbuild.GRUB2StageOptions {
-	id := uuid.MustParse("0bd700f8-090f-4556-b797-b340297ea1bd")
-
-	if kernel != nil && kernel.Append != "" {
-		kernelOptions += " " + kernel.Append
-	}
-
-	var uefiOptions *osbuild.GRUB2UEFI
-	if uefi {
-		uefiOptions = &osbuild.GRUB2UEFI{
-			Vendor: "redhat",
-		}
-	}
-
-	var legacy string
-	if !uefi {
-		legacy = t.arch.legacy
-	}
-
-	return &osbuild.GRUB2StageOptions{
-		RootFilesystemUUID: id,
-		KernelOptions:      kernelOptions,
-		Legacy:             legacy,
-		UEFI:               uefiOptions,
-	}
-}
-
-func (t *imageType) selinuxStageOptions() *osbuild.SELinuxStageOptions {
-	return &osbuild.SELinuxStageOptions{
-		FileContexts: "etc/selinux/targeted/contexts/files/file_contexts",
-	}
-}
-
-func qemuAssembler(format string, filename string, uefi bool, arch distro.Arch, imageSize uint64, vmdkSubformat osbuild.VMDKSubformat) *osbuild.Assembler {
-	var options osbuild.QEMUAssemblerOptions
-	if uefi {
-		options = osbuild.QEMUAssemblerOptions{
-			Format:        format,
-			VMDKSubformat: vmdkSubformat,
-			Filename:      filename,
-			Size:          imageSize,
-			PTUUID:        "8DFDFF87-C96E-EA48-A3A6-9408F1F6B1EF",
-			PTType:        "gpt",
-			Partitions: []osbuild.QEMUPartition{
-				{
-					Start: 2048,
-					Size:  972800,
-					Type:  "C12A7328-F81F-11D2-BA4B-00A0C93EC93B",
-					Filesystem: &osbuild.QEMUFilesystem{
-						Type:       "vfat",
-						UUID:       "46BB-8120",
-						Label:      "EFI System Partition",
-						Mountpoint: "/boot/efi",
-					},
-				},
-				{
-					Start: 976896,
-					Filesystem: &osbuild.QEMUFilesystem{
-						Type:       "xfs",
-						UUID:       "0bd700f8-090f-4556-b797-b340297ea1bd",
-						Mountpoint: "/",
-					},
-				},
-			},
-		}
-	} else {
-		if arch.Name() == distro.Ppc64leArchName {
-			options = osbuild.QEMUAssemblerOptions{
-				Bootloader: &osbuild.QEMUBootloader{
-					Type:     "grub2",
-					Platform: "powerpc-ieee1275",
-				},
-				Format:        format,
-				VMDKSubformat: vmdkSubformat,
-				Filename:      filename,
-				Size:          imageSize,
-				PTUUID:        "0x14fc63d2",
-				PTType:        "dos",
-				Partitions: []osbuild.QEMUPartition{
-					{
-						Size:     8192,
-						Type:     "41",
-						Bootable: true,
-					},
-					{
-						Start: 10240,
-						Filesystem: &osbuild.QEMUFilesystem{
-							Type:       "xfs",
-							UUID:       "0bd700f8-090f-4556-b797-b340297ea1bd",
-							Mountpoint: "/",
-						},
-					},
-				},
-			}
-		} else if arch.Name() == distro.S390xArchName {
-			options = osbuild.QEMUAssemblerOptions{
-				Bootloader: &osbuild.QEMUBootloader{
-					Type: "zipl",
-				},
-				Format:        format,
-				VMDKSubformat: vmdkSubformat,
-				Filename:      filename,
-				Size:          imageSize,
-				PTUUID:        "0x14fc63d2",
-				PTType:        "dos",
-				Partitions: []osbuild.QEMUPartition{
-					{
-						Start:    2048,
-						Bootable: true,
-						Filesystem: &osbuild.QEMUFilesystem{
-							Type:       "xfs",
-							UUID:       "0bd700f8-090f-4556-b797-b340297ea1bd",
-							Mountpoint: "/",
-						},
-					},
-				},
-			}
-		} else {
-			options = osbuild.QEMUAssemblerOptions{
-				Format:        format,
-				VMDKSubformat: vmdkSubformat,
-				Filename:      filename,
-				Size:          imageSize,
-				PTUUID:        "0x14fc63d2",
-				PTType:        "mbr",
-				Partitions: []osbuild.QEMUPartition{
-					{
-						Start:    2048,
-						Bootable: true,
-						Filesystem: &osbuild.QEMUFilesystem{
-							Type:       "xfs",
-							UUID:       "0bd700f8-090f-4556-b797-b340297ea1bd",
-							Mountpoint: "/",
-						},
-					},
-				},
-			}
-		}
-	}
-	return osbuild.NewQEMUAssembler(&options)
-}
-
-func tarAssembler(filename, compression string) *osbuild.Assembler {
-	return osbuild.NewTarAssembler(
-		&osbuild.TarAssemblerOptions{
-			Filename:    filename,
-			Compression: compression,
-		})
-}
-
-func ostreeCommitAssembler(options distro.ImageOptions, arch distro.Arch) *osbuild.Assembler {
-	return osbuild.NewOSTreeCommitAssembler(
-		&osbuild.OSTreeCommitAssemblerOptions{
-			Ref:    options.OSTree.Ref,
-			Parent: options.OSTree.Parent,
-			Tar: osbuild.OSTreeCommitAssemblerTarOptions{
-				Filename: "commit.tar",
-			},
-		},
-	)
+	return nil
 }
 
 // New creates a new distro object, defining the supported architectures and image types
 func New() distro.Distro {
-	return newDistro(defaultName, modulePlatformID, ostreeRef)
+	return newDistro("rhel-8")
 }
 
 func NewHostDistro(name, modulePlatformID, ostreeRef string) distro.Distro {
-	return newDistro(name, modulePlatformID, ostreeRef)
+	return newDistro("rhel-8")
 }
 
-func newDistro(name, modulePlatformID, ostreeRef string) distro.Distro {
+func NewRHEL84() distro.Distro {
+	return newDistro("rhel-84")
+}
+
+func NewRHEL84HostDistro(name, modulePlatformID, ostreeRef string) distro.Distro {
+	return newDistro("rhel-84")
+}
+
+func NewRHEL85() distro.Distro {
+	return newDistro("rhel-85")
+}
+
+func NewRHEL85HostDistro(name, modulePlatformID, ostreeRef string) distro.Distro {
+	return newDistro("rhel-85")
+}
+
+func NewRHEL86() distro.Distro {
+	return newDistro("rhel-86")
+}
+
+func NewRHEL86HostDistro(name, modulePlatformID, ostreeRef string) distro.Distro {
+	return newDistro("rhel-86")
+}
+
+func NewRHEL87() distro.Distro {
+	return newDistro("rhel-87")
+}
+
+func NewRHEL87HostDistro(name, modulePlatformID, ostreeRef string) distro.Distro {
+	return newDistro("rhel-87")
+}
+
+func NewCentos() distro.Distro {
+	return newDistro("centos-8")
+}
+
+func NewCentosHostDistro(name, modulePlatformID, ostreeRef string) distro.Distro {
+	return newDistro("centos-8")
+}
+
+func newDistro(distroName string) distro.Distro {
 	const GigaByte = 1024 * 1024 * 1024
 
-	edgeImgTypeX86_64 := imageType{
-		name:     "rhel-edge-commit",
-		filename: "commit.tar",
-		mimeType: "application/x-tar",
-		packages: []string{
-			"redhat-release", // TODO: is this correct for Edge?
-			"glibc", "glibc-minimal-langpack", "nss-altfiles",
-			"dracut-config-generic", "dracut-network",
-			"basesystem", "bash", "platform-python",
-			"shadow-utils", "chrony", "setup", "shadow-utils",
-			"sudo", "systemd", "coreutils", "util-linux",
-			"curl", "vim-minimal",
-			"rpm", "rpm-ostree", "polkit",
-			"lvm2", "cryptsetup", "pinentry",
-			"e2fsprogs", "dosfstools",
-			"keyutils", "gnupg2",
-			"attr", "xz", "gzip",
-			"firewalld", "iptables",
-			"NetworkManager", "NetworkManager-wifi", "NetworkManager-wwan",
-			"wpa_supplicant",
-			"dnsmasq", "traceroute",
-			"hostname", "iproute", "iputils",
-			"openssh-clients", "procps-ng", "rootfiles",
-			"openssh-server", "passwd",
-			"policycoreutils", "policycoreutils-python-utils",
-			"selinux-policy-targeted", "setools-console",
-			"less", "tar", "rsync",
-			"fwupd", "usbguard",
-			"bash-completion", "tmux",
-			"ima-evm-utils",
-			"audit", "rng-tools",
-			"podman", "container-selinux", "skopeo", "criu",
-			"slirp4netns", "fuse-overlayfs",
-			"clevis", "clevis-dracut", "clevis-luks",
-			"greenboot", "greenboot-grub2", "greenboot-rpm-ostree-grub2", "greenboot-reboot", "greenboot-status",
-			// x86 specific
-			"grub2", "grub2-efi-x64", "efibootmgr", "shim-x64", "microcode_ctl",
-			"iwl1000-firmware", "iwl100-firmware", "iwl105-firmware", "iwl135-firmware",
-			"iwl2000-firmware", "iwl2030-firmware", "iwl3160-firmware", "iwl5000-firmware",
-			"iwl5150-firmware", "iwl6000-firmware", "iwl6050-firmware", "iwl7260-firmware",
-		},
-		excludedPackages: []string{
-			"subscription-manager",
-		},
-		enabledServices: []string{
-			"NetworkManager.service", "firewalld.service", "rngd.service", "sshd.service",
-			"greenboot-grub2-set-counter", "greenboot-grub2-set-success", "greenboot-healthcheck",
-			"greenboot-rpm-ostree-grub2-check-fallback", "greenboot-status", "greenboot-task-runner",
-			"redboot-auto-reboot", "redboot-task-runner",
-		},
-		rpmOstree: true,
-		assembler: func(uefi bool, options distro.ImageOptions, arch distro.Arch, imageSize uint64) *osbuild.Assembler {
-			return ostreeCommitAssembler(options, arch)
-		},
-	}
-	edgeImgTypeAarch64 := imageType{
-		name:     "rhel-edge-commit",
-		filename: "commit.tar",
-		mimeType: "application/x-tar",
-		packages: []string{
-			"redhat-release", // TODO: is this correct for Edge?
-			"glibc", "glibc-minimal-langpack", "nss-altfiles",
-			"dracut-config-generic", "dracut-network",
-			"basesystem", "bash", "platform-python",
-			"shadow-utils", "chrony", "setup", "shadow-utils",
-			"sudo", "systemd", "coreutils", "util-linux",
-			"curl", "vim-minimal",
-			"rpm", "rpm-ostree", "polkit",
-			"lvm2", "cryptsetup", "pinentry",
-			"e2fsprogs", "dosfstools",
-			"keyutils", "gnupg2",
-			"attr", "xz", "gzip",
-			"firewalld", "iptables",
-			"NetworkManager", "NetworkManager-wifi", "NetworkManager-wwan",
-			"wpa_supplicant",
-			"dnsmasq", "traceroute",
-			"hostname", "iproute", "iputils",
-			"openssh-clients", "procps-ng", "rootfiles",
-			"openssh-server", "passwd",
-			"policycoreutils", "policycoreutils-python-utils",
-			"selinux-policy-targeted", "setools-console",
-			"less", "tar", "rsync",
-			"fwupd", "usbguard",
-			"bash-completion", "tmux",
-			"ima-evm-utils",
-			"audit", "rng-tools",
-			"podman", "container-selinux", "skopeo", "criu",
-			"slirp4netns", "fuse-overlayfs",
-			"clevis", "clevis-dracut", "clevis-luks",
-			"greenboot", "greenboot-grub2", "greenboot-rpm-ostree-grub2", "greenboot-reboot", "greenboot-status",
-			// aarch64 specific
-			"grub2-efi-aa64", "efibootmgr", "shim-aa64",
-			"iwl7260-firmware",
-		},
-		excludedPackages: []string{
-			"subscription-manager",
-		},
-		enabledServices: []string{
-			"NetworkManager.service", "firewalld.service", "rngd.service", "sshd.service",
-			"greenboot-grub2-set-counter", "greenboot-grub2-set-success", "greenboot-healthcheck",
-			"greenboot-rpm-ostree-grub2-check-fallback", "greenboot-status", "greenboot-task-runner",
-			"redboot-auto-reboot", "redboot-task-runner",
-		},
-		rpmOstree: true,
-		assembler: func(uefi bool, options distro.ImageOptions, arch distro.Arch, imageSize uint64) *osbuild.Assembler {
-			return ostreeCommitAssembler(options, arch)
-		},
-	}
-	amiImgType := imageType{
-		name:     "ami",
-		filename: "image.raw",
-		mimeType: "application/octet-stream",
-		packages: []string{
-			"checkpolicy",
-			"chrony",
-			"cloud-init",
-			"cloud-init",
-			"cloud-utils-growpart",
-			"@core",
-			"dhcp-client",
-			"gdisk",
-			"insights-client",
-			"langpacks-en",
-			"net-tools",
-			"NetworkManager",
-			"redhat-release",
-			"redhat-release-eula",
-			"rng-tools",
-			"rsync",
-			"selinux-policy-targeted",
-			"tar",
-			"yum-utils",
+	rd := distroMap[distroName]
 
-			// TODO this doesn't exist in BaseOS or AppStream
-			// "rh-amazon-rhui-client",
-		},
-		excludedPackages: []string{
-			"aic94xx-firmware",
-			"alsa-firmware",
-			"alsa-lib",
-			"alsa-tools-firmware",
-			"biosdevname",
-			"dracut-config-rescue",
-			"firewalld",
-			"iprutils",
-			"ivtv-firmware",
-			"iwl1000-firmware",
-			"iwl100-firmware",
-			"iwl105-firmware",
-			"iwl135-firmware",
-			"iwl2000-firmware",
-			"iwl2030-firmware",
-			"iwl3160-firmware",
-			"iwl3945-firmware",
-			"iwl4965-firmware",
-			"iwl5000-firmware",
-			"iwl5150-firmware",
-			"iwl6000-firmware",
-			"iwl6000g2a-firmware",
-			"iwl6000g2b-firmware",
-			"iwl6050-firmware",
-			"iwl7260-firmware",
-			"libertas-sd8686-firmware",
-			"libertas-sd8787-firmware",
-			"libertas-usb8388-firmware",
-			"plymouth",
-
-			// TODO this cannot be removed, because the kernel (?)
-			// depends on it. The ec2 kickstart force-removes it.
-			// "linux-firmware",
-
-			// TODO setfiles failes because of usr/sbin/timedatex. Exlude until
-			// https://errata.devel.redhat.com/advisory/47339 lands
-			"timedatex",
-		},
-		defaultTarget: "multi-user.target",
-		kernelOptions: "ro console=ttyS0,115200n8 console=tty0 net.ifnames=0 rd.blacklist=nouveau nvme_core.io_timeout=4294967295 crashkernel=auto",
-		bootable:      true,
-		defaultSize:   6 * GigaByte,
-		assembler: func(uefi bool, options distro.ImageOptions, arch distro.Arch, imageSize uint64) *osbuild.Assembler {
-			return qemuAssembler("raw", "image.raw", uefi, arch, imageSize, "")
-		},
+	// Architecture definitions
+	x86_64 := architecture{
+		name:     distro.X86_64ArchName,
+		distro:   &rd,
+		legacy:   "i386-pc",
+		bootType: distro.HybridBootType,
 	}
 
-	qcow2ImageType := imageType{
-		name:     "qcow2",
-		filename: "disk.qcow2",
-		mimeType: "application/x-qemu-disk",
-		packages: []string{
-			"@core",
-			"chrony",
-			"dnf",
-			"yum",
-			"nfs-utils",
-			"dnf-utils",
-			"cloud-init",
-			"python3-jsonschema",
-			"qemu-guest-agent",
-			"cloud-utils-growpart",
-			"dracut-norescue",
-			"tar",
-			"tcpdump",
-			"rsync",
-			"dnf-plugin-spacewalk",
-			"rhn-client-tools",
-			"rhnlib",
-			"rhnsd",
-			"rhn-setup",
-			"NetworkManager",
-			"dhcp-client",
-			"cockpit-ws",
-			"cockpit-system",
-			"subscription-manager-cockpit",
-			"redhat-release",
-			"redhat-release-eula",
-			"rng-tools",
-			"insights-client",
-			// TODO: rh-amazon-rhui-client
-		},
-		excludedPackages: []string{
-			"dracut-config-rescue",
-			"aic94xx-firmware",
-			"alsa-firmware",
-			"alsa-lib",
-			"alsa-tools-firmware",
-			"firewalld",
-			"ivtv-firmware",
-			"iwl1000-firmware",
-			"iwl100-firmware",
-			"iwl105-firmware",
-			"iwl135-firmware",
-			"iwl2000-firmware",
-			"iwl2030-firmware",
-			"iwl3160-firmware",
-			"iwl3945-firmware",
-			"iwl4965-firmware",
-			"iwl5000-firmware",
-			"iwl5150-firmware",
-			"iwl6000-firmware",
-			"iwl6000g2a-firmware",
-			"iwl6000g2b-firmware",
-			"iwl6050-firmware",
-			"iwl7260-firmware",
-			"libertas-sd8686-firmware",
-			"libertas-sd8787-firmware",
-			"libertas-usb8388-firmware",
-			"langpacks-*",
-			"langpacks-en",
-			"biosdevname",
-			"plymouth",
-			"iprutils",
-			"langpacks-en",
-			"fedora-release",
-			"fedora-repos",
-
-			// TODO setfiles failes because of usr/sbin/timedatex. Exlude until
-			// https://errata.devel.redhat.com/advisory/47339 lands
-			"timedatex",
-		},
-		kernelOptions: "console=ttyS0 console=ttyS0,115200n8 no_timer_check crashkernel=auto net.ifnames=0",
-		bootable:      true,
-		defaultSize:   4 * GigaByte,
-		assembler: func(uefi bool, options distro.ImageOptions, arch distro.Arch, imageSize uint64) *osbuild.Assembler {
-			return qemuAssembler("qcow2", "disk.qcow2", uefi, arch, imageSize, "")
-		},
+	aarch64 := architecture{
+		name:     distro.Aarch64ArchName,
+		distro:   &rd,
+		bootType: distro.UEFIBootType,
 	}
 
-	openstackImgType := imageType{
-		name:     "openstack",
-		filename: "disk.qcow2",
-		mimeType: "application/x-qemu-disk",
-		packages: []string{
-			// Defaults
-			"@Core",
-			"langpacks-en",
-
-			// From the lorax kickstart
-			"selinux-policy-targeted",
-			"cloud-init",
-			"qemu-guest-agent",
-			"spice-vdagent",
-		},
-		excludedPackages: []string{
-			"dracut-config-rescue",
-		},
-		kernelOptions: "ro net.ifnames=0",
-		bootable:      true,
-		defaultSize:   4 * GigaByte,
-		assembler: func(uefi bool, options distro.ImageOptions, arch distro.Arch, imageSize uint64) *osbuild.Assembler {
-			return qemuAssembler("qcow2", "disk.qcow2", uefi, arch, imageSize, "")
-		},
+	ppc64le := architecture{
+		distro:   &rd,
+		name:     distro.Ppc64leArchName,
+		legacy:   "powerpc-ieee1275",
+		bootType: distro.LegacyBootType,
+	}
+	s390x := architecture{
+		distro:   &rd,
+		name:     distro.S390xArchName,
+		bootType: distro.LegacyBootType,
 	}
 
-	tarImgType := imageType{
-		name:     "tar",
-		filename: "root.tar.xz",
-		mimeType: "application/x-tar",
-		packages: []string{
-			"policycoreutils",
-			"selinux-policy-targeted",
+	// Shared Services
+	edgeServices := []string{
+		"NetworkManager.service", "firewalld.service", "sshd.service",
+	}
+
+	if rd.osVersion == "8.4" {
+		// greenboot services aren't enabled by default in 8.4
+		edgeServices = append(edgeServices,
+			"greenboot-grub2-set-counter",
+			"greenboot-grub2-set-success",
+			"greenboot-healthcheck",
+			"greenboot-rpm-ostree-grub2-check-fallback",
+			"greenboot-status",
+			"greenboot-task-runner",
+			"redboot-auto-reboot",
+			"redboot-task-runner")
+
+	}
+
+	if !(rd.isRHEL() && versionLessThan(rd.osVersion, "8.6")) {
+		// enable fdo-client only on RHEL 8.6+ and CS8
+
+		// TODO(runcom): move fdo-client-linuxapp.service to presets?
+		edgeServices = append(edgeServices, "fdo-client-linuxapp.service")
+	}
+
+	// Image Definitions
+	edgeCommitImgType := imageType{
+		name:        "edge-commit",
+		nameAliases: []string{"rhel-edge-commit"},
+		filename:    "commit.tar",
+		mimeType:    "application/x-tar",
+		packageSets: map[string]packageSetFunc{
+			buildPkgsKey: edgeBuildPackageSet,
+			osPkgsKey:    edgeCommitPackageSet,
 		},
-		bootable:      false,
-		kernelOptions: "ro net.ifnames=0",
-		assembler: func(uefi bool, options distro.ImageOptions, arch distro.Arch, imageSize uint64) *osbuild.Assembler {
-			return tarAssembler("root.tar.xz", "xz")
+		packageSetChains: map[string][]string{
+			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
 		},
+		defaultImageConfig: &distro.ImageConfig{
+			EnabledServices: edgeServices,
+		},
+		rpmOstree:        true,
+		pipelines:        edgeCommitPipelines,
+		buildPipelines:   []string{"build"},
+		payloadPipelines: []string{"ostree-tree", "ostree-commit", "commit-archive"},
+		exports:          []string{"commit-archive"},
+	}
+
+	edgeOCIImgType := imageType{
+		name:        "edge-container",
+		nameAliases: []string{"rhel-edge-container"},
+		filename:    "container.tar",
+		mimeType:    "application/x-tar",
+		packageSets: map[string]packageSetFunc{
+			buildPkgsKey: edgeBuildPackageSet,
+			osPkgsKey:    edgeCommitPackageSet,
+			containerPkgsKey: func(t *imageType) rpmmd.PackageSet {
+				return rpmmd.PackageSet{
+					Include: []string{"nginx"},
+				}
+			},
+		},
+		packageSetChains: map[string][]string{
+			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+		},
+		defaultImageConfig: &distro.ImageConfig{
+			EnabledServices: edgeServices,
+		},
+		rpmOstree:        true,
+		bootISO:          false,
+		pipelines:        edgeContainerPipelines,
+		buildPipelines:   []string{"build"},
+		payloadPipelines: []string{"ostree-tree", "ostree-commit", "container-tree", "container"},
+		exports:          []string{"container"},
+	}
+
+	edgeRawImgType := imageType{
+		name:        "edge-raw-image",
+		nameAliases: []string{"rhel-edge-raw-image"},
+		filename:    "image.raw.xz",
+		mimeType:    "application/xz",
+		packageSets: map[string]packageSetFunc{
+			buildPkgsKey: edgeRawImageBuildPackageSet,
+		},
+		defaultSize:         10 * GigaByte,
+		rpmOstree:           true,
+		bootable:            true,
+		bootISO:             false,
+		pipelines:           edgeRawImagePipelines,
+		buildPipelines:      []string{"build"},
+		payloadPipelines:    []string{"image-tree", "image", "archive"},
+		exports:             []string{"archive"},
+		basePartitionTables: edgeBasePartitionTables,
+	}
+
+	edgeInstallerImgType := imageType{
+		name:        "edge-installer",
+		nameAliases: []string{"rhel-edge-installer"},
+		filename:    "installer.iso",
+		mimeType:    "application/x-iso9660-image",
+		packageSets: map[string]packageSetFunc{
+			// TODO: non-arch-specific package set handling for installers
+			// This image type requires build packages for installers and
+			// ostree/edge.  For now we only have x86-64 installer build
+			// package sets defined.  When we add installer build package sets
+			// for other architectures, this will need to be moved to the
+			// architecture and the merging will happen in the PackageSets()
+			// method like the other sets.
+			buildPkgsKey:     edgeInstallerBuildPackageSet,
+			osPkgsKey:        edgeCommitPackageSet,
+			installerPkgsKey: edgeInstallerPackageSet,
+		},
+		packageSetChains: map[string][]string{
+			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+		},
+		defaultImageConfig: &distro.ImageConfig{
+			EnabledServices: edgeServices,
+		},
+		rpmOstree:        true,
+		bootISO:          true,
+		pipelines:        edgeInstallerPipelines,
+		buildPipelines:   []string{"build"},
+		payloadPipelines: []string{"anaconda-tree", "bootiso-tree", "bootiso"},
+		exports:          []string{"bootiso"},
+	}
+
+	edgeSimplifiedInstallerImgType := imageType{
+		name:        "edge-simplified-installer",
+		nameAliases: []string{"rhel-edge-simplified-installer"},
+		filename:    "simplified-installer.iso",
+		mimeType:    "application/x-iso9660-image",
+		packageSets: map[string]packageSetFunc{
+			// TODO: non-arch-specific package set handling for installers
+			// This image type requires build packages for installers and
+			// ostree/edge.  For now we only have x86-64 installer build
+			// package sets defined.  When we add installer build package sets
+			// for other architectures, this will need to be moved to the
+			// architecture and the merging will happen in the PackageSets()
+			// method like the other sets.
+			buildPkgsKey:     edgeSimplifiedInstallerBuildPackageSet,
+			installerPkgsKey: edgeSimplifiedInstallerPackageSet,
+		},
+		defaultImageConfig: &distro.ImageConfig{
+			EnabledServices: edgeServices,
+		},
+		defaultSize:         10 * GigaByte,
+		rpmOstree:           true,
+		bootable:            true,
+		bootISO:             true,
+		pipelines:           edgeSimplifiedInstallerPipelines,
+		buildPipelines:      []string{"build"},
+		payloadPipelines:    []string{"image-tree", "image", "archive", "coi-tree", "efiboot-tree", "bootiso-tree", "bootiso"},
+		exports:             []string{"bootiso"},
+		basePartitionTables: edgeBasePartitionTables,
+	}
+
+	qcow2ImgType := imageType{
+		name:          "qcow2",
+		filename:      "disk.qcow2",
+		mimeType:      "application/x-qemu-disk",
+		kernelOptions: "console=tty0 console=ttyS0,115200n8 no_timer_check net.ifnames=0 crashkernel=auto",
+		packageSets: map[string]packageSetFunc{
+			buildPkgsKey: distroBuildPackageSet,
+			osPkgsKey:    qcow2CommonPackageSet,
+		},
+		packageSetChains: map[string][]string{
+			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+		},
+		defaultImageConfig: &distro.ImageConfig{
+			DefaultTarget: "multi-user.target",
+			RHSMConfig: map[distro.RHSMSubscriptionStatus]*osbuild.RHSMStageOptions{
+				distro.RHSMConfigNoSubscription: {
+					DnfPlugins: &osbuild.RHSMStageOptionsDnfPlugins{
+						ProductID: &osbuild.RHSMStageOptionsDnfPlugin{
+							Enabled: false,
+						},
+						SubscriptionManager: &osbuild.RHSMStageOptionsDnfPlugin{
+							Enabled: false,
+						},
+					},
+				},
+			},
+		},
+		bootable:            true,
+		defaultSize:         10 * GigaByte,
+		pipelines:           qcow2Pipelines,
+		buildPipelines:      []string{"build"},
+		payloadPipelines:    []string{"os", "image", "qcow2"},
+		exports:             []string{"qcow2"},
+		basePartitionTables: defaultBasePartitionTables,
 	}
 
 	vhdImgType := imageType{
 		name:     "vhd",
 		filename: "disk.vhd",
 		mimeType: "application/x-vhd",
-		packages: []string{
-			// Defaults
-			"@Core",
-			"langpacks-en",
+		packageSets: map[string]packageSetFunc{
+			buildPkgsKey: distroBuildPackageSet,
+			osPkgsKey:    vhdCommonPackageSet,
+		},
+		packageSetChains: map[string][]string{
+			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+		},
+		defaultImageConfig: &distro.ImageConfig{
+			EnabledServices: []string{
+				"sshd",
+				"waagent",
+			},
+			DefaultTarget: "multi-user.target",
+		},
+		kernelOptions:       "ro biosdevname=0 rootdelay=300 console=ttyS0 earlyprintk=ttyS0 net.ifnames=0",
+		bootable:            true,
+		defaultSize:         4 * GigaByte,
+		pipelines:           vhdPipelines(false),
+		buildPipelines:      []string{"build"},
+		payloadPipelines:    []string{"os", "image", "vpc"},
+		exports:             []string{"vpc"},
+		basePartitionTables: defaultBasePartitionTables,
+	}
 
-			// From the lorax kickstart
-			"selinux-policy-targeted",
-			"chrony",
-			"WALinuxAgent",
-			"python3",
-			"net-tools",
-			"cloud-init",
-			"cloud-utils-growpart",
-			"gdisk",
+	azureRhuiImgType := imageType{
+		name:     "azure-rhui",
+		filename: "disk.vhd.xz",
+		mimeType: "application/xz",
+		packageSets: map[string]packageSetFunc{
+			buildPkgsKey: ec2BuildPackageSet,
+			osPkgsKey:    azureRhuiCommonPackageSet,
 		},
-		excludedPackages: []string{
-			"dracut-config-rescue",
-
-			// TODO setfiles failes because of usr/sbin/timedatex. Exlude until
-			// https://errata.devel.redhat.com/advisory/47339 lands
-			"timedatex",
+		packageSetChains: map[string][]string{
+			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
 		},
-		enabledServices: []string{
-			"sshd",
-			"waagent",
+		defaultImageConfig: &distro.ImageConfig{
+			Timezone: "Etc/UTC",
+			Locale:   "en_US.UTF-8",
+			GPGKeyFiles: []string{
+				"/etc/pki/rpm-gpg/RPM-GPG-KEY-microsoft-azure-release",
+				"/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release",
+			},
+			Keyboard: &osbuild.KeymapStageOptions{
+				Keymap: "us",
+				X11Keymap: &osbuild.X11KeymapOptions{
+					Layouts: []string{"us"},
+				},
+			},
+			Sysconfig: []*osbuild.SysconfigStageOptions{
+				{
+					Kernel: &osbuild.SysconfigKernelOptions{
+						UpdateDefault: true,
+						DefaultKernel: "kernel-core",
+					},
+					Network: &osbuild.SysconfigNetworkOptions{
+						Networking: true,
+						NoZeroConf: true,
+					},
+				},
+			},
+			EnabledServices: []string{
+				"firewalld",
+				"nm-cloud-setup.service",
+				"nm-cloud-setup.timer",
+				"sshd",
+				"systemd-resolved",
+				"waagent",
+			},
+			SshdConfig: &osbuild.SshdConfigStageOptions{
+				Config: osbuild.SshdConfigConfig{
+					ClientAliveInterval: common.IntToPtr(180),
+				},
+			},
+			Modprobe: []*osbuild.ModprobeStageOptions{
+				{
+					Filename: "blacklist-amdgpu.conf",
+					Commands: osbuild.ModprobeConfigCmdList{
+						osbuild.NewModprobeConfigCmdBlacklist("amdgpu"),
+					},
+				},
+				{
+					Filename: "blacklist-intel-cstate.conf",
+					Commands: osbuild.ModprobeConfigCmdList{
+						osbuild.NewModprobeConfigCmdBlacklist("intel_cstate"),
+					},
+				},
+				{
+					Filename: "blacklist-floppy.conf",
+					Commands: osbuild.ModprobeConfigCmdList{
+						osbuild.NewModprobeConfigCmdBlacklist("floppy"),
+					},
+				},
+				{
+					Filename: "blacklist-nouveau.conf",
+					Commands: osbuild.ModprobeConfigCmdList{
+						osbuild.NewModprobeConfigCmdBlacklist("nouveau"),
+						osbuild.NewModprobeConfigCmdBlacklist("lbm-nouveau"),
+					},
+				},
+				{
+					Filename: "blacklist-skylake-edac.conf",
+					Commands: osbuild.ModprobeConfigCmdList{
+						osbuild.NewModprobeConfigCmdBlacklist("skx_edac"),
+					},
+				},
+			},
+			CloudInit: []*osbuild.CloudInitStageOptions{
+				{
+					Filename: "10-azure-kvp.cfg",
+					Config: osbuild.CloudInitConfigFile{
+						Reporting: &osbuild.CloudInitConfigReporting{
+							Logging: &osbuild.CloudInitConfigReportingHandlers{
+								Type: "log",
+							},
+							Telemetry: &osbuild.CloudInitConfigReportingHandlers{
+								Type: "hyperv",
+							},
+						},
+					},
+				},
+				{
+					Filename: "91-azure_datasource.cfg",
+					Config: osbuild.CloudInitConfigFile{
+						Datasource: &osbuild.CloudInitConfigDatasource{
+							Azure: &osbuild.CloudInitConfigDatasourceAzure{
+								ApplyNetworkConfig: false,
+							},
+						},
+						DatasourceList: []string{
+							"Azure",
+						},
+					},
+				},
+			},
+			PwQuality: &osbuild.PwqualityConfStageOptions{
+				Config: osbuild.PwqualityConfConfig{
+					Minlen:   common.IntToPtr(6),
+					Minclass: common.IntToPtr(3),
+					Dcredit:  common.IntToPtr(0),
+					Ucredit:  common.IntToPtr(0),
+					Lcredit:  common.IntToPtr(0),
+					Ocredit:  common.IntToPtr(0),
+				},
+			},
+			WAAgentConfig: &osbuild.WAAgentConfStageOptions{
+				Config: osbuild.WAAgentConfig{
+					RDFormat:     common.BoolToPtr(false),
+					RDEnableSwap: common.BoolToPtr(false),
+				},
+			},
+			RHSMConfig: map[distro.RHSMSubscriptionStatus]*osbuild.RHSMStageOptions{
+				distro.RHSMConfigNoSubscription: {
+					DnfPlugins: &osbuild.RHSMStageOptionsDnfPlugins{
+						SubscriptionManager: &osbuild.RHSMStageOptionsDnfPlugin{
+							Enabled: false,
+						},
+					},
+					SubMan: &osbuild.RHSMStageOptionsSubMan{
+						Rhsmcertd: &osbuild.SubManConfigRHSMCERTDSection{
+							AutoRegistration: common.BoolToPtr(true),
+						},
+						Rhsm: &osbuild.SubManConfigRHSMSection{
+							ManageRepos: common.BoolToPtr(false),
+						},
+					},
+				},
+				distro.RHSMConfigWithSubscription: {
+					SubMan: &osbuild.RHSMStageOptionsSubMan{
+						Rhsmcertd: &osbuild.SubManConfigRHSMCERTDSection{
+							AutoRegistration: common.BoolToPtr(true),
+						},
+						// do not disable the redhat.repo management if the user
+						// explicitly request the system to be subscribed
+					},
+				},
+			},
+			Grub2Config: &osbuild.GRUB2Config{
+				TerminalInput:  []string{"serial", "console"},
+				TerminalOutput: []string{"serial", "console"},
+				Serial:         "serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1",
+				Timeout:        10,
+			},
+			UdevRules: &osbuild.UdevRulesStageOptions{
+				Filename: "/etc/udev/rules.d/68-azure-sriov-nm-unmanaged.rules",
+				Rules: osbuild.UdevRules{
+					osbuild.UdevRuleComment{
+						Comment: []string{
+							"Accelerated Networking on Azure exposes a new SRIOV interface to the VM.",
+							"This interface is transparently bonded to the synthetic interface,",
+							"so NetworkManager should just ignore any SRIOV interfaces.",
+						},
+					},
+					osbuild.NewUdevRule(
+						[]osbuild.UdevKV{
+							{K: "SUBSYSTEM", O: "==", V: "net"},
+							{K: "DRIVERS", O: "==", V: "hv_pci"},
+							{K: "ACTION", O: "==", V: "add"},
+							{K: "ENV", A: "NM_UNMANAGED", O: "=", V: "1"},
+						},
+					),
+				},
+			},
+			SystemdUnit: []*osbuild.SystemdUnitStageOptions{
+				{
+					Unit:   "nm-cloud-setup.service",
+					Dropin: "10-rh-enable-for-azure.conf",
+					Config: osbuild.SystemdServiceUnitDropin{
+						Service: &osbuild.SystemdUnitServiceSection{
+							Environment: "NM_CLOUD_SETUP_AZURE=yes",
+						},
+					},
+				},
+			},
+			DefaultTarget: "multi-user.target",
 		},
-		defaultTarget: "multi-user.target",
-		kernelOptions: "ro biosdevname=0 rootdelay=300 console=ttyS0 earlyprintk=ttyS0 net.ifnames=0",
-		bootable:      true,
-		defaultSize:   4 * GigaByte,
-		assembler: func(uefi bool, options distro.ImageOptions, arch distro.Arch, imageSize uint64) *osbuild.Assembler {
-			return qemuAssembler("vpc", "disk.vhd", uefi, arch, imageSize, "")
-		},
+		kernelOptions:       "ro crashkernel=auto console=tty1 console=ttyS0 earlyprintk=ttyS0 rootdelay=300",
+		bootable:            true,
+		defaultSize:         68719476736,
+		pipelines:           vhdPipelines(true),
+		buildPipelines:      []string{"build"},
+		payloadPipelines:    []string{"os", "image", "vpc", "archive"},
+		exports:             []string{"archive"},
+		basePartitionTables: azureRhuiBasePartitionTables,
 	}
 
 	vmdkImgType := imageType{
 		name:     "vmdk",
 		filename: "disk.vmdk",
 		mimeType: "application/x-vmdk",
-		packages: []string{
-			"@core",
-			"chrony",
-			"firewalld",
-			"langpacks-en",
-			"open-vm-tools",
-			"selinux-policy-targeted",
+		packageSets: map[string]packageSetFunc{
+			buildPkgsKey: distroBuildPackageSet,
+			osPkgsKey:    vmdkCommonPackageSet,
 		},
-		excludedPackages: []string{
-			"dracut-config-rescue",
-
-			// TODO setfiles failes because of usr/sbin/timedatex. Exlude until
-			// https://errata.devel.redhat.com/advisory/47339 lands
-			"timedatex",
+		packageSetChains: map[string][]string{
+			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
 		},
-		kernelOptions: "ro net.ifnames=0",
-		bootable:      true,
-		defaultSize:   4 * GigaByte,
-		assembler: func(uefi bool, options distro.ImageOptions, arch distro.Arch, imageSize uint64) *osbuild.Assembler {
-			return qemuAssembler("vmdk", "disk.vmdk", uefi, arch, imageSize, osbuild.VMDKSubformatStreamOptimized)
-		},
+		kernelOptions:       "ro net.ifnames=0",
+		bootable:            true,
+		defaultSize:         4 * GigaByte,
+		pipelines:           vmdkPipelines,
+		buildPipelines:      []string{"build"},
+		payloadPipelines:    []string{"os", "image", "vmdk"},
+		exports:             []string{"vmdk"},
+		basePartitionTables: defaultBasePartitionTables,
 	}
 
-	r := distribution{
-		buildPackages: []string{
-			"dnf",
-			"dosfstools",
-			"e2fsprogs",
-			"glibc",
-			"policycoreutils",
-			"python36",
-			"python3-iniparse", // dependency of org.osbuild.rhsm stage
-			"qemu-img",
-			"selinux-policy-targeted",
-			"systemd",
-			"tar",
-			"xfsprogs",
-			"xz",
+	openstackImgType := imageType{
+		name:     "openstack",
+		filename: "disk.qcow2",
+		mimeType: "application/x-qemu-disk",
+		packageSets: map[string]packageSetFunc{
+			buildPkgsKey: distroBuildPackageSet,
+			osPkgsKey:    openstackCommonPackageSet,
 		},
-		name:             name,
-		modulePlatformID: modulePlatformID,
-		ostreeRef:        ostreeRef,
+		packageSetChains: map[string][]string{
+			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+		},
+		kernelOptions:       "ro net.ifnames=0",
+		bootable:            true,
+		defaultSize:         4 * GigaByte,
+		pipelines:           openstackPipelines,
+		buildPipelines:      []string{"build"},
+		payloadPipelines:    []string{"os", "image", "qcow2"},
+		exports:             []string{"qcow2"},
+		basePartitionTables: defaultBasePartitionTables,
 	}
-	x8664 := architecture{
-		distro: &r,
-		name:   "x86_64",
-		bootloaderPackages: []string{
-			"dracut-config-generic",
-			"grub2-pc",
+
+	// default EC2 images config (common for all architectures)
+	defaultEc2ImageConfig := &distro.ImageConfig{
+		Timezone: "UTC",
+		TimeSynchronization: &osbuild.ChronyStageOptions{
+			Servers: []osbuild.ChronyConfigServer{
+				{
+					Hostname: "169.254.169.123",
+					Prefer:   common.BoolToPtr(true),
+					Iburst:   common.BoolToPtr(true),
+					Minpoll:  common.IntToPtr(4),
+					Maxpoll:  common.IntToPtr(4),
+				},
+			},
+			// empty string will remove any occurrences of the option from the configuration
+			LeapsecTz: common.StringToPtr(""),
 		},
-		buildPackages: []string{
-			"grub2-pc",
+		Keyboard: &osbuild.KeymapStageOptions{
+			Keymap: "us",
+			X11Keymap: &osbuild.X11KeymapOptions{
+				Layouts: []string{"us"},
+			},
 		},
-		legacy: "i386-pc",
+		EnabledServices: []string{
+			"sshd",
+			"NetworkManager",
+			"nm-cloud-setup.service",
+			"nm-cloud-setup.timer",
+			"cloud-init",
+			"cloud-init-local",
+			"cloud-config",
+			"cloud-final",
+			"reboot.target",
+		},
+		DefaultTarget: "multi-user.target",
+		Sysconfig: []*osbuild.SysconfigStageOptions{
+			{
+				Kernel: &osbuild.SysconfigKernelOptions{
+					UpdateDefault: true,
+					DefaultKernel: "kernel",
+				},
+				Network: &osbuild.SysconfigNetworkOptions{
+					Networking: true,
+					NoZeroConf: true,
+				},
+				NetworkScripts: &osbuild.NetworkScriptsOptions{
+					IfcfgFiles: map[string]osbuild.IfcfgFile{
+						"eth0": {
+							Device:    "eth0",
+							Bootproto: osbuild.IfcfgBootprotoDHCP,
+							OnBoot:    common.BoolToPtr(true),
+							Type:      osbuild.IfcfgTypeEthernet,
+							UserCtl:   common.BoolToPtr(true),
+							PeerDNS:   common.BoolToPtr(true),
+							IPv6Init:  common.BoolToPtr(false),
+						},
+					},
+				},
+			},
+		},
+		RHSMConfig: map[distro.RHSMSubscriptionStatus]*osbuild.RHSMStageOptions{
+			distro.RHSMConfigNoSubscription: {
+				// RHBZ#1932802
+				SubMan: &osbuild.RHSMStageOptionsSubMan{
+					Rhsmcertd: &osbuild.SubManConfigRHSMCERTDSection{
+						AutoRegistration: common.BoolToPtr(true),
+					},
+					Rhsm: &osbuild.SubManConfigRHSMSection{
+						ManageRepos: common.BoolToPtr(false),
+					},
+				},
+			},
+			distro.RHSMConfigWithSubscription: {
+				// RHBZ#1932802
+				SubMan: &osbuild.RHSMStageOptionsSubMan{
+					Rhsmcertd: &osbuild.SubManConfigRHSMCERTDSection{
+						AutoRegistration: common.BoolToPtr(true),
+					},
+					// do not disable the redhat.repo management if the user
+					// explicitly request the system to be subscribed
+				},
+			},
+		},
+		SystemdLogind: []*osbuild.SystemdLogindStageOptions{
+			{
+				Filename: "00-getty-fixes.conf",
+				Config: osbuild.SystemdLogindConfigDropin{
+
+					Login: osbuild.SystemdLogindConfigLoginSection{
+						NAutoVTs: common.IntToPtr(0),
+					},
+				},
+			},
+		},
+		CloudInit: []*osbuild.CloudInitStageOptions{
+			{
+				Filename: "00-rhel-default-user.cfg",
+				Config: osbuild.CloudInitConfigFile{
+					SystemInfo: &osbuild.CloudInitConfigSystemInfo{
+						DefaultUser: &osbuild.CloudInitConfigDefaultUser{
+							Name: "ec2-user",
+						},
+					},
+				},
+			},
+		},
+		Modprobe: []*osbuild.ModprobeStageOptions{
+			{
+				Filename: "blacklist-nouveau.conf",
+				Commands: osbuild.ModprobeConfigCmdList{
+					osbuild.NewModprobeConfigCmdBlacklist("nouveau"),
+				},
+			},
+		},
+		DracutConf: []*osbuild.DracutConfStageOptions{
+			{
+				Filename: "sgdisk.conf",
+				Config: osbuild.DracutConfigFile{
+					Install: []string{"sgdisk"},
+				},
+			},
+		},
+		SystemdUnit: []*osbuild.SystemdUnitStageOptions{
+			// RHBZ#1822863
+			{
+				Unit:   "nm-cloud-setup.service",
+				Dropin: "10-rh-enable-for-ec2.conf",
+				Config: osbuild.SystemdServiceUnitDropin{
+					Service: &osbuild.SystemdUnitServiceSection{
+						Environment: "NM_CLOUD_SETUP_EC2=yes",
+					},
+				},
+			},
+		},
+		Authselect: &osbuild.AuthselectStageOptions{
+			Profile: "sssd",
+		},
+		SshdConfig: &osbuild.SshdConfigStageOptions{
+			Config: osbuild.SshdConfigConfig{
+				PasswordAuthentication: common.BoolToPtr(false),
+			},
+		},
 	}
-	x8664.setImageTypes(
-		amiImgType,
-		edgeImgTypeX86_64,
-		qcow2ImageType,
+
+	// default EC2 images config (x86_64)
+	defaultEc2ImageConfigX86_64 := &distro.ImageConfig{
+		DracutConf: append(defaultEc2ImageConfig.DracutConf,
+			&osbuild.DracutConfStageOptions{
+				Filename: "ec2.conf",
+				Config: osbuild.DracutConfigFile{
+					AddDrivers: []string{
+						"nvme",
+						"xen-blkfront",
+					},
+				},
+			}),
+	}
+	defaultEc2ImageConfigX86_64 = defaultEc2ImageConfigX86_64.InheritFrom(defaultEc2ImageConfig)
+
+	// default AMI (EC2 BYOS) images config
+	defaultAMIImageConfig := &distro.ImageConfig{
+		RHSMConfig: map[distro.RHSMSubscriptionStatus]*osbuild.RHSMStageOptions{
+			distro.RHSMConfigNoSubscription: {
+				// RHBZ#1932802
+				SubMan: &osbuild.RHSMStageOptionsSubMan{
+					Rhsmcertd: &osbuild.SubManConfigRHSMCERTDSection{
+						AutoRegistration: common.BoolToPtr(true),
+					},
+					// Don't disable RHSM redhat.repo management on the AMI
+					// image, which is BYOS and does not use RHUI for content.
+					// Otherwise subscribing the system manually after booting
+					// it would result in empty redhat.repo. Without RHUI, such
+					// system would have no way to get Red Hat content, but
+					// enable the repo management manually, which would be very
+					// confusing.
+				},
+			},
+			distro.RHSMConfigWithSubscription: {
+				// RHBZ#1932802
+				SubMan: &osbuild.RHSMStageOptionsSubMan{
+					Rhsmcertd: &osbuild.SubManConfigRHSMCERTDSection{
+						AutoRegistration: common.BoolToPtr(true),
+					},
+					// do not disable the redhat.repo management if the user
+					// explicitly request the system to be subscribed
+				},
+			},
+		},
+	}
+	defaultAMIImageConfigX86_64 := defaultAMIImageConfig.InheritFrom(defaultEc2ImageConfigX86_64)
+	defaultAMIImageConfig = defaultAMIImageConfig.InheritFrom(defaultEc2ImageConfig)
+
+	amiImgTypeX86_64 := imageType{
+		name:     "ami",
+		filename: "image.raw",
+		mimeType: "application/octet-stream",
+		packageSets: map[string]packageSetFunc{
+			buildPkgsKey: ec2BuildPackageSet,
+			osPkgsKey:    ec2CommonPackageSet,
+		},
+		packageSetChains: map[string][]string{
+			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+		},
+		defaultImageConfig:  defaultAMIImageConfigX86_64,
+		kernelOptions:       "console=ttyS0,115200n8 console=tty0 net.ifnames=0 rd.blacklist=nouveau nvme_core.io_timeout=4294967295 crashkernel=auto",
+		bootable:            true,
+		bootType:            distro.LegacyBootType,
+		defaultSize:         10 * GigaByte,
+		pipelines:           ec2Pipelines,
+		buildPipelines:      []string{"build"},
+		payloadPipelines:    []string{"os", "image"},
+		exports:             []string{"image"},
+		basePartitionTables: ec2BasePartitionTables,
+	}
+
+	amiImgTypeAarch64 := imageType{
+		name:     "ami",
+		filename: "image.raw",
+		mimeType: "application/octet-stream",
+		packageSets: map[string]packageSetFunc{
+			buildPkgsKey: ec2BuildPackageSet,
+			osPkgsKey:    ec2CommonPackageSet,
+		},
+		packageSetChains: map[string][]string{
+			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+		},
+		defaultImageConfig:  defaultAMIImageConfig,
+		kernelOptions:       "console=ttyS0,115200n8 console=tty0 net.ifnames=0 rd.blacklist=nouveau nvme_core.io_timeout=4294967295 iommu.strict=0 crashkernel=auto",
+		bootable:            true,
+		defaultSize:         10 * GigaByte,
+		pipelines:           ec2Pipelines,
+		buildPipelines:      []string{"build"},
+		payloadPipelines:    []string{"os", "image"},
+		exports:             []string{"image"},
+		basePartitionTables: ec2BasePartitionTables,
+	}
+
+	ec2ImgTypeX86_64 := imageType{
+		name:     "ec2",
+		filename: "image.raw.xz",
+		mimeType: "application/xz",
+		packageSets: map[string]packageSetFunc{
+			buildPkgsKey: ec2BuildPackageSet,
+			osPkgsKey:    rhelEc2PackageSet,
+		},
+		packageSetChains: map[string][]string{
+			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+		},
+		defaultImageConfig:  defaultEc2ImageConfigX86_64,
+		kernelOptions:       "console=ttyS0,115200n8 console=tty0 net.ifnames=0 rd.blacklist=nouveau nvme_core.io_timeout=4294967295 crashkernel=auto",
+		bootable:            true,
+		bootType:            distro.LegacyBootType,
+		defaultSize:         10 * GigaByte,
+		pipelines:           rhelEc2Pipelines,
+		buildPipelines:      []string{"build"},
+		payloadPipelines:    []string{"os", "image", "archive"},
+		exports:             []string{"archive"},
+		basePartitionTables: ec2BasePartitionTables,
+	}
+
+	ec2ImgTypeAarch64 := imageType{
+		name:     "ec2",
+		filename: "image.raw.xz",
+		mimeType: "application/xz",
+		packageSets: map[string]packageSetFunc{
+			buildPkgsKey: ec2BuildPackageSet,
+			osPkgsKey:    rhelEc2PackageSet,
+		},
+		packageSetChains: map[string][]string{
+			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+		},
+		defaultImageConfig:  defaultEc2ImageConfig,
+		kernelOptions:       "console=ttyS0,115200n8 console=tty0 net.ifnames=0 rd.blacklist=nouveau nvme_core.io_timeout=4294967295 iommu.strict=0 crashkernel=auto",
+		bootable:            true,
+		defaultSize:         10 * GigaByte,
+		pipelines:           rhelEc2Pipelines,
+		buildPipelines:      []string{"build"},
+		payloadPipelines:    []string{"os", "image", "archive"},
+		exports:             []string{"archive"},
+		basePartitionTables: ec2BasePartitionTables,
+	}
+
+	ec2HaImgTypeX86_64 := imageType{
+		name:     "ec2-ha",
+		filename: "image.raw.xz",
+		mimeType: "application/xz",
+		packageSets: map[string]packageSetFunc{
+			buildPkgsKey: ec2BuildPackageSet,
+			osPkgsKey:    rhelEc2HaPackageSet,
+		},
+		packageSetChains: map[string][]string{
+			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+		},
+		defaultImageConfig:  defaultEc2ImageConfigX86_64,
+		kernelOptions:       "console=ttyS0,115200n8 console=tty0 net.ifnames=0 rd.blacklist=nouveau nvme_core.io_timeout=4294967295 crashkernel=auto",
+		bootable:            true,
+		bootType:            distro.LegacyBootType,
+		defaultSize:         10 * GigaByte,
+		pipelines:           rhelEc2Pipelines,
+		buildPipelines:      []string{"build"},
+		payloadPipelines:    []string{"os", "image", "archive"},
+		exports:             []string{"archive"},
+		basePartitionTables: ec2BasePartitionTables,
+	}
+
+	// default EC2-SAP image config (x86_64)
+	defaultEc2SapImageConfigX86_64 := &distro.ImageConfig{
+		SELinuxConfig: &osbuild.SELinuxConfigStageOptions{
+			State: osbuild.SELinuxStatePermissive,
+		},
+		// RHBZ#1960617
+		Tuned: osbuild.NewTunedStageOptions("sap-hana"),
+		// RHBZ#1959979
+		Tmpfilesd: []*osbuild.TmpfilesdStageOptions{
+			osbuild.NewTmpfilesdStageOptions("sap.conf",
+				[]osbuild.TmpfilesdConfigLine{
+					{
+						Type: "x",
+						Path: "/tmp/.sap*",
+					},
+					{
+						Type: "x",
+						Path: "/tmp/.hdb*lock",
+					},
+					{
+						Type: "x",
+						Path: "/tmp/.trex*lock",
+					},
+				},
+			),
+		},
+		// RHBZ#1959963
+		PamLimitsConf: []*osbuild.PamLimitsConfStageOptions{
+			osbuild.NewPamLimitsConfStageOptions("99-sap.conf",
+				[]osbuild.PamLimitsConfigLine{
+					{
+						Domain: "@sapsys",
+						Type:   osbuild.PamLimitsTypeHard,
+						Item:   osbuild.PamLimitsItemNofile,
+						Value:  osbuild.PamLimitsValueInt(1048576),
+					},
+					{
+						Domain: "@sapsys",
+						Type:   osbuild.PamLimitsTypeSoft,
+						Item:   osbuild.PamLimitsItemNofile,
+						Value:  osbuild.PamLimitsValueInt(1048576),
+					},
+					{
+						Domain: "@dba",
+						Type:   osbuild.PamLimitsTypeHard,
+						Item:   osbuild.PamLimitsItemNofile,
+						Value:  osbuild.PamLimitsValueInt(1048576),
+					},
+					{
+						Domain: "@dba",
+						Type:   osbuild.PamLimitsTypeSoft,
+						Item:   osbuild.PamLimitsItemNofile,
+						Value:  osbuild.PamLimitsValueInt(1048576),
+					},
+					{
+						Domain: "@sapsys",
+						Type:   osbuild.PamLimitsTypeHard,
+						Item:   osbuild.PamLimitsItemNproc,
+						Value:  osbuild.PamLimitsValueUnlimited,
+					},
+					{
+						Domain: "@sapsys",
+						Type:   osbuild.PamLimitsTypeSoft,
+						Item:   osbuild.PamLimitsItemNproc,
+						Value:  osbuild.PamLimitsValueUnlimited,
+					},
+					{
+						Domain: "@dba",
+						Type:   osbuild.PamLimitsTypeHard,
+						Item:   osbuild.PamLimitsItemNproc,
+						Value:  osbuild.PamLimitsValueUnlimited,
+					},
+					{
+						Domain: "@dba",
+						Type:   osbuild.PamLimitsTypeSoft,
+						Item:   osbuild.PamLimitsItemNproc,
+						Value:  osbuild.PamLimitsValueUnlimited,
+					},
+				},
+			),
+		},
+		// RHBZ#1959962
+		Sysctld: []*osbuild.SysctldStageOptions{
+			osbuild.NewSysctldStageOptions("sap.conf",
+				[]osbuild.SysctldConfigLine{
+					{
+						Key:   "kernel.pid_max",
+						Value: "4194304",
+					},
+					{
+						Key:   "vm.max_map_count",
+						Value: "2147483647",
+					},
+				},
+			),
+		},
+		// E4S/EUS
+		DNFConfig: []*osbuild.DNFConfigStageOptions{
+			osbuild.NewDNFConfigStageOptions(
+				[]osbuild.DNFVariable{
+					{
+						Name:  "releasever",
+						Value: rd.osVersion,
+					},
+				},
+				nil,
+			),
+		},
+	}
+	defaultEc2SapImageConfigX86_64 = defaultEc2SapImageConfigX86_64.InheritFrom(defaultEc2ImageConfigX86_64)
+
+	ec2SapImgTypeX86_64 := imageType{
+		name:     "ec2-sap",
+		filename: "image.raw.xz",
+		mimeType: "application/xz",
+		packageSets: map[string]packageSetFunc{
+			buildPkgsKey: ec2BuildPackageSet,
+			osPkgsKey:    rhelEc2SapPackageSet,
+		},
+		packageSetChains: map[string][]string{
+			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+		},
+		defaultImageConfig:  defaultEc2SapImageConfigX86_64,
+		kernelOptions:       "console=ttyS0,115200n8 console=tty0 net.ifnames=0 rd.blacklist=nouveau nvme_core.io_timeout=4294967295 crashkernel=auto processor.max_cstate=1 intel_idle.max_cstate=1",
+		bootable:            true,
+		bootType:            distro.LegacyBootType,
+		defaultSize:         10 * GigaByte,
+		pipelines:           rhelEc2Pipelines,
+		buildPipelines:      []string{"build"},
+		payloadPipelines:    []string{"os", "image", "archive"},
+		exports:             []string{"archive"},
+		basePartitionTables: ec2BasePartitionTables,
+	}
+
+	// GCE BYOS image
+	defaultGceByosImageConfig := &distro.ImageConfig{
+		Timezone: "UTC",
+		TimeSynchronization: &osbuild.ChronyStageOptions{
+			Timeservers: []string{"metadata.google.internal"},
+		},
+		Firewall: &osbuild.FirewallStageOptions{
+			DefaultZone: "trusted",
+		},
+		EnabledServices: []string{
+			"sshd",
+			"rngd",
+			"dnf-automatic.timer",
+		},
+		DisabledServices: []string{
+			"sshd-keygen@",
+			"reboot.target",
+		},
+		DefaultTarget: "multi-user.target",
+		Locale:        "en_US.UTF-8",
+		Keyboard: &osbuild.KeymapStageOptions{
+			Keymap: "us",
+		},
+		DNFConfig: []*osbuild.DNFConfigStageOptions{
+			{
+				Config: &osbuild.DNFConfig{
+					Main: &osbuild.DNFConfigMain{
+						IPResolve: "4",
+					},
+				},
+			},
+		},
+		DNFAutomaticConfig: &osbuild.DNFAutomaticConfigStageOptions{
+			Config: &osbuild.DNFAutomaticConfig{
+				Commands: &osbuild.DNFAutomaticConfigCommands{
+					ApplyUpdates: common.BoolToPtr(true),
+					UpgradeType:  osbuild.DNFAutomaticUpgradeTypeSecurity,
+				},
+			},
+		},
+		YUMRepos: []*osbuild.YumReposStageOptions{
+			{
+				Filename: "google-cloud.repo",
+				Repos: []osbuild.YumRepository{
+					{
+						Id:           "google-compute-engine",
+						Name:         "Google Compute Engine",
+						BaseURL:      []string{"https://packages.cloud.google.com/yum/repos/google-compute-engine-el8-x86_64-stable"},
+						Enabled:      common.BoolToPtr(true),
+						GPGCheck:     common.BoolToPtr(true),
+						RepoGPGCheck: common.BoolToPtr(false),
+						GPGKey: []string{
+							"https://packages.cloud.google.com/yum/doc/yum-key.gpg",
+							"https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg",
+						},
+					},
+					{
+						Id:           "google-cloud-sdk",
+						Name:         "Google Cloud SDK",
+						BaseURL:      []string{"https://packages.cloud.google.com/yum/repos/cloud-sdk-el8-x86_64"},
+						Enabled:      common.BoolToPtr(true),
+						GPGCheck:     common.BoolToPtr(true),
+						RepoGPGCheck: common.BoolToPtr(false),
+						GPGKey: []string{
+							"https://packages.cloud.google.com/yum/doc/yum-key.gpg",
+							"https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg",
+						},
+					},
+				},
+			},
+		},
+		RHSMConfig: map[distro.RHSMSubscriptionStatus]*osbuild.RHSMStageOptions{
+			distro.RHSMConfigNoSubscription: {
+				SubMan: &osbuild.RHSMStageOptionsSubMan{
+					Rhsmcertd: &osbuild.SubManConfigRHSMCERTDSection{
+						AutoRegistration: common.BoolToPtr(true),
+					},
+					// Don't disable RHSM redhat.repo management on the GCE
+					// image, which is BYOS and does not use RHUI for content.
+					// Otherwise subscribing the system manually after booting
+					// it would result in empty redhat.repo. Without RHUI, such
+					// system would have no way to get Red Hat content, but
+					// enable the repo management manually, which would be very
+					// confusing.
+				},
+			},
+			distro.RHSMConfigWithSubscription: {
+				SubMan: &osbuild.RHSMStageOptionsSubMan{
+					Rhsmcertd: &osbuild.SubManConfigRHSMCERTDSection{
+						AutoRegistration: common.BoolToPtr(true),
+					},
+					// do not disable the redhat.repo management if the user
+					// explicitly request the system to be subscribed
+				},
+			},
+		},
+		SshdConfig: &osbuild.SshdConfigStageOptions{
+			Config: osbuild.SshdConfigConfig{
+				PasswordAuthentication: common.BoolToPtr(false),
+				ClientAliveInterval:    common.IntToPtr(420),
+				PermitRootLogin:        osbuild.PermitRootLoginValueNo,
+			},
+		},
+		Sysconfig: []*osbuild.SysconfigStageOptions{
+			{
+				Kernel: &osbuild.SysconfigKernelOptions{
+					DefaultKernel: "kernel-core",
+					UpdateDefault: true,
+				},
+			},
+		},
+		Modprobe: []*osbuild.ModprobeStageOptions{
+			{
+				Filename: "blacklist-floppy.conf",
+				Commands: osbuild.ModprobeConfigCmdList{
+					osbuild.NewModprobeConfigCmdBlacklist("floppy"),
+				},
+			},
+		},
+	}
+
+	if rd.osVersion == "8.4" {
+		// NOTE(akoutsou): these are enabled in the package preset, but for
+		// some reason do not get enabled on 8.4.
+		// the reason is unknown and deeply myserious
+		defaultGceByosImageConfig.EnabledServices = append(defaultGceByosImageConfig.EnabledServices,
+			"google-oslogin-cache.timer",
+			"google-guest-agent.service",
+			"google-shutdown-scripts.service",
+			"google-startup-scripts.service",
+			"google-osconfig-agent.service",
+		)
+	}
+
+	gceImgType := imageType{
+		name:     "gce",
+		filename: "image.tar.gz",
+		mimeType: "application/gzip",
+		packageSets: map[string]packageSetFunc{
+			buildPkgsKey: distroBuildPackageSet,
+			osPkgsKey:    gcePackageSet,
+		},
+		packageSetChains: map[string][]string{
+			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+		},
+		defaultImageConfig:  defaultGceByosImageConfig,
+		kernelOptions:       "net.ifnames=0 biosdevname=0 scsi_mod.use_blk_mq=Y crashkernel=auto console=ttyS0,38400n8d",
+		bootable:            true,
+		bootType:            distro.UEFIBootType,
+		defaultSize:         20 * GigaByte,
+		pipelines:           gcePipelines,
+		buildPipelines:      []string{"build"},
+		payloadPipelines:    []string{"os", "image", "archive"},
+		exports:             []string{"archive"},
+		basePartitionTables: defaultBasePartitionTables,
+	}
+
+	defaultGceRhuiImageConfig := &distro.ImageConfig{
+		RHSMConfig: map[distro.RHSMSubscriptionStatus]*osbuild.RHSMStageOptions{
+			distro.RHSMConfigNoSubscription: {
+				SubMan: &osbuild.RHSMStageOptionsSubMan{
+					Rhsmcertd: &osbuild.SubManConfigRHSMCERTDSection{
+						AutoRegistration: common.BoolToPtr(true),
+					},
+					Rhsm: &osbuild.SubManConfigRHSMSection{
+						ManageRepos: common.BoolToPtr(false),
+					},
+				},
+			},
+			distro.RHSMConfigWithSubscription: {
+				SubMan: &osbuild.RHSMStageOptionsSubMan{
+					Rhsmcertd: &osbuild.SubManConfigRHSMCERTDSection{
+						AutoRegistration: common.BoolToPtr(true),
+					},
+					// do not disable the redhat.repo management if the user
+					// explicitly request the system to be subscribed
+				},
+			},
+		},
+	}
+	defaultGceRhuiImageConfig = defaultGceRhuiImageConfig.InheritFrom(defaultGceByosImageConfig)
+
+	gceRhuiImgType := imageType{
+		name:     "gce-rhui",
+		filename: "image.tar.gz",
+		mimeType: "application/gzip",
+		packageSets: map[string]packageSetFunc{
+			buildPkgsKey: distroBuildPackageSet,
+			osPkgsKey:    gceRhuiPackageSet,
+		},
+		packageSetChains: map[string][]string{
+			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+		},
+		defaultImageConfig:  defaultGceRhuiImageConfig,
+		kernelOptions:       "net.ifnames=0 biosdevname=0 scsi_mod.use_blk_mq=Y crashkernel=auto console=ttyS0,38400n8d",
+		bootable:            true,
+		bootType:            distro.UEFIBootType,
+		defaultSize:         20 * GigaByte,
+		pipelines:           gcePipelines,
+		buildPipelines:      []string{"build"},
+		payloadPipelines:    []string{"os", "image", "archive"},
+		exports:             []string{"archive"},
+		basePartitionTables: defaultBasePartitionTables,
+	}
+
+	tarImgType := imageType{
+		name:     "tar",
+		filename: "root.tar.xz",
+		mimeType: "application/x-tar",
+		packageSets: map[string]packageSetFunc{
+			buildPkgsKey: distroBuildPackageSet,
+			osPkgsKey: func(t *imageType) rpmmd.PackageSet {
+				return rpmmd.PackageSet{
+					Include: []string{"policycoreutils", "selinux-policy-targeted"},
+					Exclude: []string{"rng-tools"},
+				}
+			},
+		},
+		packageSetChains: map[string][]string{
+			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+		},
+		pipelines:        tarPipelines,
+		buildPipelines:   []string{"build"},
+		payloadPipelines: []string{"os", "root-tar"},
+		exports:          []string{"root-tar"},
+	}
+	imageInstaller := imageType{
+		name:     "image-installer",
+		filename: "installer.iso",
+		mimeType: "application/x-iso9660-image",
+		packageSets: map[string]packageSetFunc{
+			buildPkgsKey:     anacondaBuildPackageSet,
+			osPkgsKey:        bareMetalPackageSet,
+			installerPkgsKey: anacondaPackageSet,
+		},
+		packageSetChains: map[string][]string{
+			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+		},
+		rpmOstree:        false,
+		bootISO:          true,
+		bootable:         true,
+		pipelines:        imageInstallerPipelines,
+		buildPipelines:   []string{"build"},
+		payloadPipelines: []string{"os", "anaconda-tree", "bootiso-tree", "bootiso"},
+		exports:          []string{"bootiso"},
+	}
+
+	ociImgType := qcow2ImgType
+	ociImgType.name = "oci"
+
+	x86_64.addImageTypes(
+		amiImgTypeX86_64,
+		edgeCommitImgType,
+		edgeInstallerImgType,
+		edgeOCIImgType,
+		gceImgType,
+		imageInstaller,
+		ociImgType,
 		openstackImgType,
+		qcow2ImgType,
 		tarImgType,
 		vhdImgType,
 		vmdkImgType,
 	)
 
-	aarch64 := architecture{
-		distro: &r,
-		name:   "aarch64",
-		bootloaderPackages: []string{
-			"dracut-config-generic",
-			"efibootmgr",
-			"grub2-efi-aa64",
-			"grub2-tools",
-			"shim-aa64",
-		},
-		uefi: true,
-	}
-	aarch64.setImageTypes(
-		amiImgType,
-		edgeImgTypeAarch64,
-		qcow2ImageType,
+	aarch64.addImageTypes(
+		amiImgTypeAarch64,
+		edgeCommitImgType,
+		edgeInstallerImgType,
+		edgeOCIImgType,
+		imageInstaller,
 		openstackImgType,
+		qcow2ImgType,
 		tarImgType,
 	)
 
-	ppc64le := architecture{
-		distro: &r,
-		name:   "ppc64le",
-		bootloaderPackages: []string{
-			"dracut-config-generic",
-			"powerpc-utils",
-			"grub2-ppc64le",
-			"grub2-ppc64le-modules",
-		},
-		buildPackages: []string{
-			"grub2-ppc64le",
-			"grub2-ppc64le-modules",
-		},
-		legacy: "powerpc-ieee1275",
-		uefi:   false,
+	ppc64le.addImageTypes(
+		qcow2ImgType,
+		tarImgType,
+	)
+
+	s390x.addImageTypes(
+		qcow2ImgType,
+		tarImgType,
+	)
+
+	if rd.isRHEL() {
+		if !versionLessThan(rd.osVersion, "8.6") {
+			// image types only available on 8.6 and later on RHEL
+			// These edge image types require FDO which aren't available on older versions
+			x86_64.addImageTypes(edgeSimplifiedInstallerImgType, edgeRawImgType)
+			aarch64.addImageTypes(edgeSimplifiedInstallerImgType, edgeRawImgType)
+		}
+
+		// add azure to RHEL distro only
+		x86_64.addImageTypes(azureRhuiImgType)
+
+		// add ec2 image types to RHEL distro only
+		x86_64.addImageTypes(ec2ImgTypeX86_64, ec2HaImgTypeX86_64)
+		aarch64.addImageTypes(ec2ImgTypeAarch64)
+
+		if rd.osVersion != "8.5" {
+			// NOTE: RHEL 8.5 is going away and these image types require some
+			// work to get working, so we just disable them here until the
+			// whole distro gets deleted
+			x86_64.addImageTypes(ec2SapImgTypeX86_64)
+		}
+
+		// add GCE RHUI image to RHEL only
+		x86_64.addImageTypes(gceRhuiImgType)
+
+		// add s390x to RHEL distro only
+		rd.addArches(s390x)
+	} else {
+		x86_64.addImageTypes(edgeSimplifiedInstallerImgType, edgeRawImgType)
+		aarch64.addImageTypes(edgeSimplifiedInstallerImgType, edgeRawImgType)
 	}
-	ppc64le.setImageTypes(
-		qcow2ImageType,
-		tarImgType,
-	)
-
-	s390x := architecture{
-		distro: &r,
-		name:   "s390x",
-		bootloaderPackages: []string{
-			"dracut-config-generic",
-			"s390utils-base",
-		},
-		uefi: false,
-	}
-	s390x.setImageTypes(
-		tarImgType,
-		qcow2ImageType,
-	)
-
-	r.setArches(x8664, aarch64, ppc64le, s390x)
-
-	return &r
+	rd.addArches(x86_64, aarch64, ppc64le)
+	return &rd
 }

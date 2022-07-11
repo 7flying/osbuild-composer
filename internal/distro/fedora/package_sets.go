@@ -11,57 +11,13 @@ import (
 	"github.com/osbuild/osbuild-composer/internal/rpmmd"
 )
 
-// BUILD PACKAGE SETS
-
-// distro-wide build package set
-func distroBuildPackageSet(t *imageType) rpmmd.PackageSet {
-	ps := rpmmd.PackageSet{
-		Include: []string{
-			"dnf",
-			"dosfstools",
-			"e2fsprogs",
-			"policycoreutils",
-			"qemu-img",
-			"selinux-policy-targeted",
-			"systemd",
-			"tar",
-			"xz",
-		},
-	}
-
-	switch t.Arch().Name() {
-
-	case distro.X86_64ArchName:
-		ps = ps.Append(x8664BuildPackageSet(t))
-	}
-
-	return ps
-}
-
-// x86_64 build package set
-func x8664BuildPackageSet(t *imageType) rpmmd.PackageSet {
-	return rpmmd.PackageSet{
-		Include: []string{
-			"grub2-pc",
-		},
-	}
-}
-
-// common ec2 image build package set
-func ec2BuildPackageSet(t *imageType) rpmmd.PackageSet {
-	return distroBuildPackageSet(t)
-}
-
 func ec2CommonPackageSet(t *imageType) rpmmd.PackageSet {
 	return rpmmd.PackageSet{
 		Include: []string{
 			"@core",
 			"chrony",
-			"selinux-policy-targeted",
 			"langpacks-en",
 			"libxcrypt-compat",
-			"xfsprogs",
-			"cloud-init",
 			"checkpolicy",
 			"net-tools",
 		},
@@ -70,177 +26,6 @@ func ec2CommonPackageSet(t *imageType) rpmmd.PackageSet {
 			"geolite2-city",
 			"geolite2-country",
 			"zram-generator-defaults",
-		},
-	}.Append(bootPackageSet(t))
-}
-
-// common iot image build package set
-func iotBuildPackageSet(t *imageType) rpmmd.PackageSet {
-	return distroBuildPackageSet(t).Append(
-		rpmmd.PackageSet{
-			Include: []string{
-				"rpm-ostree",
-			},
-		})
-}
-
-// installer boot package sets, needed for booting and
-// also in the build host
-
-func anacondaBootPackageSet(t *imageType) rpmmd.PackageSet {
-	ps := rpmmd.PackageSet{}
-
-	grubCommon := rpmmd.PackageSet{
-		Include: []string{
-			"grub2-tools",
-			"grub2-tools-extra",
-			"grub2-tools-minimal",
-		},
-	}
-
-	efiCommon := rpmmd.PackageSet{
-		Include: []string{
-			"efibootmgr",
-		},
-	}
-
-	switch t.Arch().Name() {
-	case distro.X86_64ArchName:
-		ps = ps.Append(grubCommon)
-		ps = ps.Append(efiCommon)
-		ps = ps.Append(rpmmd.PackageSet{
-			Include: []string{
-				"grub2-efi-x64",
-				"grub2-efi-x64-cdboot",
-				"grub2-pc",
-				"grub2-pc-modules",
-				"shim-x64",
-				"syslinux",
-				"syslinux-nonlinux",
-			},
-		})
-	case distro.Aarch64ArchName:
-		ps = ps.Append(grubCommon)
-		ps = ps.Append(efiCommon)
-		ps = ps.Append(rpmmd.PackageSet{
-			Include: []string{
-				"grub2-efi-aa64-cdboot",
-				"grub2-efi-aa64",
-				"shim-aa64",
-			},
-		})
-
-	default:
-		panic(fmt.Sprintf("unsupported arch: %s", t.Arch().Name()))
-	}
-
-	return ps
-}
-
-func installerBuildPackageSet(t *imageType) rpmmd.PackageSet {
-	return distroBuildPackageSet(t).Append(
-		rpmmd.PackageSet{
-			Include: []string{
-				"isomd5sum",
-				"xorriso",
-			},
-		})
-}
-
-func anacondaBuildPackageSet(t *imageType) rpmmd.PackageSet {
-	ps := rpmmd.PackageSet{
-		Include: []string{
-			"squashfs-tools",
-			"lorax-templates-generic",
-		},
-	}
-
-	ps = ps.Append(installerBuildPackageSet(t))
-	ps = ps.Append(anacondaBootPackageSet(t))
-
-	return ps
-}
-
-func iotInstallerBuildPackageSet(t *imageType) rpmmd.PackageSet {
-	return anacondaBuildPackageSet(t).Append(
-		iotBuildPackageSet(t),
-	)
-}
-
-// BOOT PACKAGE SETS
-
-func bootPackageSet(t *imageType) rpmmd.PackageSet {
-	if !t.bootable {
-		return rpmmd.PackageSet{}
-	}
-
-	var addLegacyBootPkg bool
-	var addUEFIBootPkg bool
-
-	switch bt := t.getBootType(); bt {
-	case distro.LegacyBootType:
-		addLegacyBootPkg = true
-	case distro.UEFIBootType:
-		addUEFIBootPkg = true
-	case distro.HybridBootType:
-		addLegacyBootPkg = true
-		addUEFIBootPkg = true
-	default:
-		panic(fmt.Sprintf("unsupported boot type: %q", bt))
-	}
-
-	ps := rpmmd.PackageSet{}
-
-	switch t.Arch().Name() {
-	case distro.X86_64ArchName:
-		if addLegacyBootPkg {
-			ps = ps.Append(x8664LegacyBootPackageSet(t))
-		}
-		if addUEFIBootPkg {
-			ps = ps.Append(x8664UEFIBootPackageSet(t))
-		}
-
-	case distro.Aarch64ArchName:
-		ps = ps.Append(aarch64UEFIBootPackageSet(t))
-
-	default:
-		panic(fmt.Sprintf("unsupported boot arch: %s", t.Arch().Name()))
-	}
-
-	return ps
-}
-
-// x86_64 Legacy arch-specific boot package set
-func x8664LegacyBootPackageSet(t *imageType) rpmmd.PackageSet {
-	return rpmmd.PackageSet{
-		Include: []string{
-			"dracut-config-generic",
-			"grub2-pc",
-		},
-	}
-}
-
-// x86_64 UEFI arch-specific boot package set
-func x8664UEFIBootPackageSet(t *imageType) rpmmd.PackageSet {
-	return rpmmd.PackageSet{
-		Include: []string{
-			"dracut-config-generic",
-			"efibootmgr",
-			"grub2-efi-x64",
-			"shim-x64",
-		},
-	}
-}
-
-// aarch64 UEFI arch-specific boot package set
-func aarch64UEFIBootPackageSet(t *imageType) rpmmd.PackageSet {
-	return rpmmd.PackageSet{
-		Include: []string{
-			"dracut-config-generic",
-			"efibootmgr",
-			"grub2-efi-aa64",
-			"grub2-tools",
-			"shim-aa64",
 		},
 	}
 }
@@ -251,7 +36,6 @@ func qcow2CommonPackageSet(t *imageType) rpmmd.PackageSet {
 			"@Fedora Cloud Server",
 			"chrony",
 			"systemd-udev",
-			"selinux-policy-targeted",
 			"langpacks-en",
 		},
 		Exclude: []string{
@@ -266,7 +50,7 @@ func qcow2CommonPackageSet(t *imageType) rpmmd.PackageSet {
 			"grubby-deprecated",
 			"extlinux-bootloader",
 		},
-	}.Append(bootPackageSet(t))
+	}
 
 	return ps
 }
@@ -276,11 +60,9 @@ func vhdCommonPackageSet(t *imageType) rpmmd.PackageSet {
 		Include: []string{
 			"@core",
 			"chrony",
-			"selinux-policy-targeted",
 			"langpacks-en",
 			"net-tools",
 			"ntfsprogs",
-			"WALinuxAgent",
 			"libxcrypt-compat",
 			"initscripts",
 			"glibc-all-langpacks",
@@ -291,7 +73,7 @@ func vhdCommonPackageSet(t *imageType) rpmmd.PackageSet {
 			"geolite2-country",
 			"zram-generator-defaults",
 		},
-	}.Append(bootPackageSet(t))
+	}
 
 	return ps
 }
@@ -302,7 +84,6 @@ func vmdkCommonPackageSet(t *imageType) rpmmd.PackageSet {
 			"@Fedora Cloud Server",
 			"chrony",
 			"systemd-udev",
-			"selinux-policy-targeted",
 			"langpacks-en",
 		},
 		Exclude: []string{
@@ -317,7 +98,7 @@ func vmdkCommonPackageSet(t *imageType) rpmmd.PackageSet {
 			"grubby-deprecated",
 			"extlinux-bootloader",
 		},
-	}.Append(bootPackageSet(t))
+	}
 
 	return ps
 }
@@ -327,7 +108,6 @@ func openstackCommonPackageSet(t *imageType) rpmmd.PackageSet {
 		Include: []string{
 			"@core",
 			"chrony",
-			"selinux-policy-targeted",
 			"spice-vdagent",
 			"qemu-guest-agent",
 			"xen-libs",
@@ -341,7 +121,7 @@ func openstackCommonPackageSet(t *imageType) rpmmd.PackageSet {
 			"geolite2-country",
 			"zram-generator-defaults",
 		},
-	}.Append(bootPackageSet(t))
+	}
 
 	return ps
 }
@@ -357,7 +137,6 @@ func iotCommitPackageSet(t *imageType) rpmmd.PackageSet {
 			"sssd-client",
 			"libsss_sudo",
 			"shadow-utils",
-			"dracut-config-generic",
 			"dracut-network",
 			"polkit",
 			"lvm2",
@@ -397,7 +176,6 @@ func iotCommitPackageSet(t *imageType) rpmmd.PackageSet {
 			"procps-ng",
 			"rootfiles",
 			"rpm",
-			"selinux-policy-targeted",
 			"smartmontools-selinux",
 			"setup",
 			"shadow-utils",
@@ -448,52 +226,9 @@ func iotCommitPackageSet(t *imageType) rpmmd.PackageSet {
 			"iwlax2xx-firmware",
 		},
 	}
-	switch t.Arch().Name() {
-	case distro.X86_64ArchName:
-		ps = ps.Append(x8664IOTCommitPackageSet())
-
-	case distro.Aarch64ArchName:
-		ps = ps.Append(aarch64IOTCommitPackageSet())
-	}
 
 	return ps
 
-}
-
-func x8664IOTCommitPackageSet() rpmmd.PackageSet {
-	return rpmmd.PackageSet{
-		Include: []string{
-			"grub2",
-			"grub2-efi-x64",
-			"efibootmgr",
-			"shim-x64",
-			"microcode_ctl",
-			"iwl1000-firmware",
-			"iwl100-firmware",
-			"iwl105-firmware",
-			"iwl135-firmware",
-			"iwl2000-firmware",
-			"iwl2030-firmware",
-			"iwl3160-firmware",
-			"iwl5000-firmware",
-			"iwl5150-firmware",
-			"iwl6000-firmware",
-			"iwl6050-firmware",
-		},
-	}
-}
-
-func aarch64IOTCommitPackageSet() rpmmd.PackageSet {
-	return rpmmd.PackageSet{
-		Include: []string{
-			"grub2",
-			"grub2-efi-aa64",
-			"efibootmgr",
-			"shim-aa64",
-			"uboot-images-armv8",
-			"bcm283x-firmware",
-			"arm-image-installer"},
-	}
 }
 
 // INSTALLER PACKAGE SET
@@ -688,8 +423,6 @@ func anacondaPackageSet(t *imageType) rpmmd.PackageSet {
 		},
 	})
 
-	ps = ps.Append(anacondaBootPackageSet(t))
-
 	r, err := strconv.Atoi(t.Arch().Distro().Releasever())
 	if err != nil {
 		log.Errorf("failed to convert fedora release %s to string: %s", t.Arch().Distro().Releasever(), err)
@@ -729,4 +462,65 @@ func anacondaPackageSet(t *imageType) rpmmd.PackageSet {
 
 func iotInstallerPackageSet(t *imageType) rpmmd.PackageSet {
 	return anacondaPackageSet(t)
+}
+
+func containerPackageSet(t *imageType) rpmmd.PackageSet {
+	ps := rpmmd.PackageSet{
+		Include: []string{
+			"bash",
+			"coreutils",
+			"dnf-yum",
+			"dnf",
+			"fedora-release-container",
+			"fedora-repos-modular",
+			"glibc-minimal-langpack",
+			"rootfiles",
+			"rpm",
+			"sudo",
+			"tar",
+			"vim-minimal",
+		},
+		Exclude: []string{
+			"crypto-policies-scripts",
+			"dbus-broker",
+			"deltarpm",
+			"dosfstools",
+			"e2fsprogs",
+			"elfutils-debuginfod-client",
+			"fuse-libs",
+			"gawk-all-langpacks",
+			"glibc-gconv-extra",
+			"glibc-langpack-en",
+			"gnupg2-smime",
+			"grubby",
+			"kernel-core",
+			"kernel-debug-core",
+			"kernel",
+			"langpacks-en_GB",
+			"langpacks-en",
+			"libss",
+			"libxcrypt-compat",
+			"nano",
+			"openssl-pkcs11",
+			"pinentry",
+			"python3-unbound",
+			"shared-mime-info",
+			"sssd-client",
+			"sudo-python-plugin",
+			"systemd",
+			"trousers",
+			"whois-nls",
+			"xkeyboard-config",
+		},
+	}
+
+	// util-linux-core was created in Fedora 35 as a smaller
+	// version of util-linux
+	if t.arch.distro.releaseVersion == "34" {
+		ps.Include = append(ps.Include, "util-linux")
+	} else {
+		ps.Include = append(ps.Include, "util-linux-core")
+	}
+
+	return ps
 }

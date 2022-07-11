@@ -1,7 +1,8 @@
 package target
 
+const TargetNameVMWare TargetName = "org.osbuild.vmware"
+
 type VMWareTargetOptions struct {
-	Filename   string `json:"filename"`
 	Host       string `json:"host"`
 	Username   string `json:"username"`
 	Password   string `json:"password"`
@@ -13,5 +14,9 @@ type VMWareTargetOptions struct {
 func (VMWareTargetOptions) isTargetOptions() {}
 
 func NewVMWareTarget(options *VMWareTargetOptions) *Target {
-	return newTarget("org.osbuild.vmware", options)
+	return newTarget(TargetNameVMWare, options)
+}
+
+func NewVMWareTargetResult() *TargetResult {
+	return newTargetResult(TargetNameVMWare, nil)
 }

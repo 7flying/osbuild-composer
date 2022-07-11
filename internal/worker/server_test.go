@@ -11,15 +11,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/osbuild/osbuild-composer/pkg/jobqueue"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/osbuild/osbuild-composer/internal/distro"
 	"github.com/osbuild/osbuild-composer/internal/distro/test_distro"
-	"github.com/osbuild/osbuild-composer/internal/jobqueue"
 	"github.com/osbuild/osbuild-composer/internal/jobqueue/fsjobqueue"
 	"github.com/osbuild/osbuild-composer/internal/osbuild2"
 	"github.com/osbuild/osbuild-composer/internal/rpmmd"
+	"github.com/osbuild/osbuild-composer/internal/target"
 	"github.com/osbuild/osbuild-composer/internal/test"
 	"github.com/osbuild/osbuild-composer/internal/worker"
 	"github.com/osbuild/osbuild-composer/internal/worker/clienterrors"
@@ -223,11 +224,21 @@ func TestArgs(t *testing.T) {
 	server := newTestServer(t, t.TempDir(), time.Duration(0), "/api/worker/v1", false)
 
 	job := worker.OSBuildJob{
-		Manifest:  manifest,
-		ImageName: "test-image",
+		Manifest: manifest,
 		PipelineNames: &worker.PipelineNames{
 			Build:   []string{"b"},
 			Payload: []string{"x", "y", "z"},
+		},
+		Targets: []*target.Target{
+			{
+				Name:      target.TargetNameWorkerServer,
+				ImageName: "test-image",
+				OsbuildArtifact: target.OsbuildArtifact{
+					ExportFilename: "test-image",
+					ExportName:     "assembler",
+				},
+				Options: &target.WorkerServerTargetOptions{},
+			},
 		},
 	}
 	jobId, err := server.EnqueueOSBuild(arch.Name(), &job, "")
@@ -399,18 +410,38 @@ func TestMixedOSBuildJob(t *testing.T) {
 	fbPipelines := &worker.PipelineNames{Build: distro.BuildPipelinesFallback(), Payload: distro.PayloadPipelinesFallback()}
 
 	oldJob := worker.OSBuildJob{
-		Manifest:  emptyManifestV2,
-		ImageName: "no-pipeline-names",
+		Manifest: emptyManifestV2,
+		Targets: []*target.Target{
+			{
+				Name:      target.TargetNameWorkerServer,
+				ImageName: "no-pipeline-names",
+				OsbuildArtifact: target.OsbuildArtifact{
+					ExportFilename: "no-pipeline-names",
+					ExportName:     "assembler",
+				},
+				Options: &target.WorkerServerTargetOptions{},
+			},
+		},
 	}
 	oldJobID, err := server.EnqueueOSBuild("x", &oldJob, "")
 	require.NoError(err)
 
 	newJob := worker.OSBuildJob{
-		Manifest:  emptyManifestV2,
-		ImageName: "with-pipeline-names",
+		Manifest: emptyManifestV2,
 		PipelineNames: &worker.PipelineNames{
 			Build:   []string{"build"},
 			Payload: []string{"other", "pipelines"},
+		},
+		Targets: []*target.Target{
+			{
+				Name:      target.TargetNameWorkerServer,
+				ImageName: "with-pipeline-names",
+				OsbuildArtifact: target.OsbuildArtifact{
+					ExportFilename: "with-pipeline-names",
+					ExportName:     "assembler",
+				},
+				Options: &target.WorkerServerTargetOptions{},
+			},
 		},
 	}
 	newJobID, err := server.EnqueueOSBuild("x", &newJob, "")
@@ -423,7 +454,7 @@ func TestMixedOSBuildJob(t *testing.T) {
 	// OldJob gets default pipeline names when read
 	require.Equal(fbPipelines, oldJobRead.PipelineNames)
 	require.Equal(oldJob.Manifest, oldJobRead.Manifest)
-	require.Equal(oldJob.ImageName, oldJobRead.ImageName)
+	require.Equal(oldJob.Targets, oldJobRead.Targets)
 	// Not entirely equal
 	require.NotEqual(oldJob, oldJobRead)
 
@@ -717,110 +748,6 @@ func TestDepsolveLegacyErrorConversion(t *testing.T) {
 	_, _, err = server.DepsolveJobStatus(depsolveJobId, &depsolveJobResult)
 	require.NoError(t, err)
 	require.Equal(t, expectedResult, depsolveJobResult)
-}
-
-// Enquueue OSBuild jobs and save both kinds of
-// error types (old & new) to the queue and ensure
-// that both kinds of errors can be read back
-func TestMixedOSBuildJobErrors(t *testing.T) {
-	require := require.New(t)
-
-	emptyManifestV2 := distro.Manifest(`{"version":"2","pipelines":{}}`)
-	server := newTestServer(t, t.TempDir(), time.Millisecond*10, "/", false)
-
-	oldJob := worker.OSBuildJob{
-		Manifest:  emptyManifestV2,
-		ImageName: "no-pipeline-names",
-	}
-	oldJobID, err := server.EnqueueOSBuild("x", &oldJob, "")
-	require.NoError(err)
-
-	newJob := worker.OSBuildJob{
-		Manifest:  emptyManifestV2,
-		ImageName: "with-pipeline-names",
-		PipelineNames: &worker.PipelineNames{
-			Build:   []string{"build"},
-			Payload: []string{"other", "pipelines"},
-		},
-	}
-	newJobID, err := server.EnqueueOSBuild("x", &newJob, "")
-	require.NoError(err)
-
-	oldJobRead := new(worker.OSBuildJob)
-	err = server.OSBuildJob(oldJobID, oldJobRead)
-	require.NoError(err)
-	// Not entirely equal
-	require.NotEqual(oldJob, oldJobRead)
-
-	// NewJob the same when read back
-	newJobRead := new(worker.OSBuildJob)
-	err = server.OSBuildJob(newJobID, newJobRead)
-	require.NoError(err)
-
-	// Dequeue the jobs (via RequestJob) to get their tokens and update them to
-	// test the result retrieval
-
-	getJob := func() (uuid.UUID, uuid.UUID) {
-		// don't block forever if the jobs weren't added or can't be retrieved
-		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-		defer cancel()
-		id, token, _, _, _, err := server.RequestJob(ctx, "x", []string{worker.JobTypeOSBuild}, []string{""})
-		require.NoError(err)
-		return id, token
-	}
-
-	getJobTokens := func(n uint) map[uuid.UUID]uuid.UUID {
-		tokens := make(map[uuid.UUID]uuid.UUID, n)
-		for idx := uint(0); idx < n; idx++ {
-			id, token := getJob()
-			tokens[id] = token
-		}
-		return tokens
-	}
-
-	jobTokens := getJobTokens(2)
-	// make sure we got them both as expected
-	require.Contains(jobTokens, oldJobID)
-	require.Contains(jobTokens, newJobID)
-
-	oldJobResult := &worker.OSBuildJobResult{
-		TargetErrors: []string{"Upload error"},
-	}
-	oldJobResultRaw, err := json.Marshal(oldJobResult)
-	require.NoError(err)
-	oldJobToken := jobTokens[oldJobID]
-	err = server.FinishJob(oldJobToken, oldJobResultRaw)
-	require.NoError(err)
-
-	oldJobResultRead := new(worker.OSBuildJobResult)
-	_, _, err = server.OSBuildJobStatus(oldJobID, oldJobResultRead)
-	require.NoError(err)
-
-	require.NotEqual(oldJobResult, oldJobResultRead)
-	require.Equal(oldJobResult.Success, false)
-	require.Equal(oldJobResultRead.Success, false)
-
-	newJobResult := &worker.OSBuildJobResult{
-		PipelineNames: &worker.PipelineNames{
-			Build:   []string{"build-result"},
-			Payload: []string{"result-test-payload", "result-test-assembler"},
-		},
-		JobResult: worker.JobResult{
-			JobError: clienterrors.WorkerClientError(clienterrors.ErrorUploadingImage, "Error uploading image", nil),
-		},
-	}
-	newJobResultRaw, err := json.Marshal(newJobResult)
-	require.NoError(err)
-	newJobToken := jobTokens[newJobID]
-	err = server.FinishJob(newJobToken, newJobResultRaw)
-	require.NoError(err)
-
-	newJobResultRead := new(worker.OSBuildJobResult)
-	_, _, err = server.OSBuildJobStatus(newJobID, newJobResultRead)
-	require.NoError(err)
-	require.Equal(newJobResult, newJobResultRead)
-	require.Equal(newJobResult.Success, false)
-	require.Equal(newJobResultRead.Success, false)
 }
 
 // Enquueue Koji jobs and save both kinds of

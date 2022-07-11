@@ -1888,7 +1888,7 @@
         ]
       },
       {
-        "name": "ostree-tree",
+        "name": "os",
         "build": "name:build",
         "stages": [
           {
@@ -5421,7 +5421,7 @@
                 "type": "org.osbuild.tree",
                 "origin": "org.osbuild.pipeline",
                 "references": [
-                  "name:ostree-tree"
+                  "name:os"
                 ]
               }
             },
@@ -10637,7 +10637,7 @@
         "check_gpg": true
       }
     ],
-    "container": [
+    "container-tree": [
       {
         "name": "acl",
         "epoch": 0,
@@ -12419,7 +12419,7 @@
         "check_gpg": true
       }
     ],
-    "packages": [
+    "os": [
       {
         "name": "acl",
         "epoch": 0,

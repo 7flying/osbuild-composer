@@ -9,7 +9,9 @@ import (
 	"os"
 
 	"github.com/osbuild/osbuild-composer/internal/blueprint"
+	"github.com/osbuild/osbuild-composer/internal/distro"
 	"github.com/osbuild/osbuild-composer/internal/distroregistry"
+	"github.com/osbuild/osbuild-composer/internal/ostree"
 )
 
 func main() {
@@ -22,14 +24,19 @@ func main() {
 	flag.StringVar(&imageName, "image", "", "Image name")
 	flag.Parse()
 
-	dr := distroregistry.NewDefault()
-
-	distro := dr.GetDistro(distroName)
-	if distro == nil {
-		panic(fmt.Errorf("Distro %q does not exist", distro))
+	if distroName == "" || archName == "" || imageName == "" {
+		flag.Usage()
+		os.Exit(1)
 	}
 
-	arch, err := distro.GetArch(archName)
+	dr := distroregistry.NewDefault()
+
+	d := dr.GetDistro(distroName)
+	if d == nil {
+		panic(fmt.Errorf("Distro %q does not exist", distroName))
+	}
+
+	arch, err := d.GetArch(archName)
 	if err != nil {
 		panic(err)
 	}
@@ -41,6 +48,12 @@ func main() {
 
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
-	pkgset := image.PackageSets(blueprint.Blueprint{}, nil)
+	pkgset := image.PackageSets(blueprint.Blueprint{}, distro.ImageOptions{
+		OSTree: ostree.RequestParams{
+			URL:    "foo",
+			Ref:    "bar",
+			Parent: "baz",
+		},
+	}, nil)
 	_ = encoder.Encode(pkgset)
 }

@@ -14,13 +14,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/osbuild/osbuild-composer/pkg/jobqueue"
 	"github.com/sirupsen/logrus"
 
 	"github.com/osbuild/osbuild-composer/internal/blueprint"
 	"github.com/osbuild/osbuild-composer/internal/common"
 	"github.com/osbuild/osbuild-composer/internal/distro"
 	"github.com/osbuild/osbuild-composer/internal/distroregistry"
-	"github.com/osbuild/osbuild-composer/internal/jobqueue"
 	"github.com/osbuild/osbuild-composer/internal/prometheus"
 	"github.com/osbuild/osbuild-composer/internal/rpmmd"
 	"github.com/osbuild/osbuild-composer/internal/target"
@@ -103,7 +103,7 @@ func (s *Server) enqueueCompose(distribution distro.Distro, bp blueprint.Bluepri
 	ir := irs[0]
 
 	depsolveJobID, err := s.workers.EnqueueDepsolve(&worker.DepsolveJob{
-		PackageSets:      ir.imageType.PackageSets(bp, ir.repositories),
+		PackageSets:      ir.imageType.PackageSets(bp, ir.imageOptions, ir.repositories),
 		ModulePlatformID: distribution.ModulePlatformID(),
 		Arch:             ir.arch.Name(),
 		Releasever:       distribution.Releasever(),
@@ -119,7 +119,6 @@ func (s *Server) enqueueCompose(distribution distro.Distro, bp blueprint.Bluepri
 
 	id, err = s.workers.EnqueueOSBuildAsDependency(ir.arch.Name(), &worker.OSBuildJob{
 		Targets: []*target.Target{ir.target},
-		Exports: ir.imageType.Exports(),
 		PipelineNames: &worker.PipelineNames{
 			Build:   ir.imageType.BuildPipelines(),
 			Payload: ir.imageType.PayloadPipelines(),
@@ -156,7 +155,7 @@ func (s *Server) enqueueKojiCompose(taskID uint64, server, name, version, releas
 	var buildIDs []uuid.UUID
 	for _, ir := range irs {
 		depsolveJobID, err := s.workers.EnqueueDepsolve(&worker.DepsolveJob{
-			PackageSets:      ir.imageType.PackageSets(bp, ir.repositories),
+			PackageSets:      ir.imageType.PackageSets(bp, ir.imageOptions, ir.repositories),
 			ModulePlatformID: distribution.ModulePlatformID(),
 			Arch:             ir.arch.Name(),
 			Releasever:       distribution.Releasever(),
@@ -181,12 +180,12 @@ func (s *Server) enqueueKojiCompose(taskID uint64, server, name, version, releas
 		kojiTarget := target.NewKojiTarget(&target.KojiTargetOptions{
 			Server:          server,
 			UploadDirectory: kojiDirectory,
-			Filename:        ir.imageType.Filename(),
 		})
+		kojiTarget.OsbuildArtifact.ExportFilename = ir.imageType.Filename()
+		kojiTarget.OsbuildArtifact.ExportName = ir.imageType.Exports()[0]
 		kojiTarget.ImageName = kojiFilename
 
 		buildID, err := s.workers.EnqueueOSBuildAsDependency(ir.arch.Name(), &worker.OSBuildJob{
-			Exports: ir.imageType.Exports(),
 			PipelineNames: &worker.PipelineNames{
 				Build:   ir.imageType.BuildPipelines(),
 				Payload: ir.imageType.PayloadPipelines(),

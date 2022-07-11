@@ -16,8 +16,7 @@ import (
 )
 
 type KojiFinalizeJobImpl struct {
-	KojiServers        map[string]koji.GSSAPICredentials
-	relaxTimeoutFactor uint
+	KojiServers map[string]kojiServer
 }
 
 func (impl *KojiFinalizeJobImpl) kojiImport(
@@ -26,19 +25,19 @@ func (impl *KojiFinalizeJobImpl) kojiImport(
 	buildRoots []koji.BuildRoot,
 	images []koji.Image,
 	directory, token string) error {
-	transport := koji.CreateKojiTransport(impl.relaxTimeoutFactor)
 
 	serverURL, err := url.Parse(server)
 	if err != nil {
 		return err
 	}
 
-	creds, exists := impl.KojiServers[serverURL.Hostname()]
+	kojiServer, exists := impl.KojiServers[serverURL.Hostname()]
 	if !exists {
 		return fmt.Errorf("Koji server has not been configured: %s", serverURL.Hostname())
 	}
 
-	k, err := koji.NewFromGSSAPI(server, &creds, transport)
+	transport := koji.CreateKojiTransport(kojiServer.relaxTimeoutFactor)
+	k, err := koji.NewFromGSSAPI(server, &kojiServer.creds, transport)
 	if err != nil {
 		return err
 	}
@@ -58,19 +57,19 @@ func (impl *KojiFinalizeJobImpl) kojiImport(
 }
 
 func (impl *KojiFinalizeJobImpl) kojiFail(server string, buildID int, token string) error {
-	transport := koji.CreateKojiTransport(impl.relaxTimeoutFactor)
 
 	serverURL, err := url.Parse(server)
 	if err != nil {
 		return err
 	}
 
-	creds, exists := impl.KojiServers[serverURL.Hostname()]
+	kojiServer, exists := impl.KojiServers[serverURL.Hostname()]
 	if !exists {
 		return fmt.Errorf("Koji server has not been configured: %s", serverURL.Hostname())
 	}
 
-	k, err := koji.NewFromGSSAPI(server, &creds, transport)
+	transport := koji.CreateKojiTransport(kojiServer.relaxTimeoutFactor)
+	k, err := koji.NewFromGSSAPI(server, &kojiServer.creds, transport)
 	if err != nil {
 		return err
 	}
@@ -231,7 +230,7 @@ func (impl *KojiFinalizeJobImpl) Run(job worker.Job) error {
 				return fmt.Errorf("error: Koji compose OSBuild job result doesn't contain exactly one target result")
 			}
 			kojiTarget := buildArgs.TargetResults[0]
-			kojiTargetOptions := kojiTarget.Options.(target.KojiTargetResultOptions)
+			kojiTargetOptions := kojiTarget.Options.(*target.KojiTargetResultOptions)
 
 			buildRoots = append(buildRoots, koji.BuildRoot{
 				ID: uint64(i),

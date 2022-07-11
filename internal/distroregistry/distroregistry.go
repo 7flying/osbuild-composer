@@ -10,11 +10,7 @@ import (
 	"github.com/osbuild/osbuild-composer/internal/distro/fedora"
 	"github.com/osbuild/osbuild-composer/internal/distro/rhel7"
 	"github.com/osbuild/osbuild-composer/internal/distro/rhel8"
-	"github.com/osbuild/osbuild-composer/internal/distro/rhel84"
-	"github.com/osbuild/osbuild-composer/internal/distro/rhel85"
-	"github.com/osbuild/osbuild-composer/internal/distro/rhel86"
 	"github.com/osbuild/osbuild-composer/internal/distro/rhel90"
-	"github.com/osbuild/osbuild-composer/internal/distro/rhel90beta"
 )
 
 // When adding support for a new distribution, add it here.
@@ -25,12 +21,11 @@ var supportedDistros = []supportedDistro{
 	{fedora.NewF36, fedora.NewHostDistro},
 	{rhel7.New, rhel7.NewHostDistro},
 	{rhel8.New, rhel8.NewHostDistro},
-	{rhel84.New, rhel84.NewHostDistro},
-	{rhel85.New, rhel85.NewHostDistro},
-	{rhel86.New, rhel86.NewHostDistro},
-	{rhel86.NewRHEL87, rhel86.NewRHEL87HostDistro},
-	{rhel86.NewCentos, rhel86.NewCentosHostDistro},
-	{rhel90beta.New, rhel90beta.NewHostDistro},
+	{rhel8.NewRHEL84, rhel8.NewRHEL84HostDistro},
+	{rhel8.NewRHEL85, rhel8.NewRHEL85HostDistro},
+	{rhel8.NewRHEL86, rhel8.NewRHEL86HostDistro},
+	{rhel8.NewRHEL87, rhel8.NewRHEL87HostDistro},
+	{rhel8.NewCentos, rhel8.NewCentosHostDistro},
 	{rhel90.New, rhel90.NewHostDistro},
 	{rhel90.NewRHEL91, rhel90.NewRHEL91HostDistro},
 	{rhel90.NewCentos, rhel90.NewCentosHostDistro},

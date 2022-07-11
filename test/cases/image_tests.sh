@@ -50,9 +50,13 @@ get_test_cases () {
     pushd $IMAGE_TEST_CASES_PATH > /dev/null
         ALL_CASES=$(ls "$TEST_CASE_SELECTOR"*.json)
         SKIP_OSTREE=$(jq -r 'if (.manifest.sources."org.osbuild.ostree" != null) then input_filename else empty end' "${TEST_CASE_SELECTOR}"*.json)
-        # temporarily skip azure-rhui image, see COMPOSER-1397 for details
-        SKIP_TMP=$(grep azure_rhui <<< "$ALL_CASES")
-        SKIP_CASES=("${SKIP_OSTREE[@]}" "$SKIP_TMP")
+        # skip azure_rhui test on RHEL-8.6 only
+        if [[ "$DISTRO_CODE" =~ "rhel-86" ]]; then
+            SKIP_AZURE=$(grep azure_rhui <<< "$ALL_CASES")
+            SKIP_CASES=("${SKIP_OSTREE[@]}" "$SKIP_AZURE")
+        else
+            SKIP_CASES=("${SKIP_OSTREE[@]}")
+        fi
         mapfile -t TEST_CASES < <(grep -vxFf <(printf '%s\n' "${SKIP_CASES[@]}") <(printf '%s\n' "${ALL_CASES[@]}"))
         echo "${TEST_CASES[@]}"
     popd > /dev/null

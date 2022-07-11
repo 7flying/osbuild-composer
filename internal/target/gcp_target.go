@@ -1,7 +1,8 @@
 package target
 
+const TargetNameGCP TargetName = "org.osbuild.gcp"
+
 type GCPTargetOptions struct {
-	Filename          string   `json:"filename"`
 	Region            string   `json:"region"`
 	Os                string   `json:"os"` // not exposed in cloudapi for now
 	Bucket            string   `json:"bucket"`
@@ -17,7 +18,7 @@ type GCPTargetOptions struct {
 func (GCPTargetOptions) isTargetOptions() {}
 
 func NewGCPTarget(options *GCPTargetOptions) *Target {
-	return newTarget("org.osbuild.gcp", options)
+	return newTarget(TargetNameGCP, options)
 }
 
 type GCPTargetResultOptions struct {
@@ -28,5 +29,5 @@ type GCPTargetResultOptions struct {
 func (GCPTargetResultOptions) isTargetResultOptions() {}
 
 func NewGCPTargetResult(options *GCPTargetResultOptions) *TargetResult {
-	return newTargetResult("org.osbuild.gcp", options)
+	return newTargetResult(TargetNameGCP, options)
 }

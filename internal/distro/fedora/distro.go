@@ -1,29 +1,25 @@
 package fedora
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand"
-	"path"
 	"sort"
 	"strings"
 
 	"github.com/osbuild/osbuild-composer/internal/blueprint"
 	"github.com/osbuild/osbuild-composer/internal/disk"
 	"github.com/osbuild/osbuild-composer/internal/distro"
-	"github.com/osbuild/osbuild-composer/internal/osbuild2"
-	osbuild "github.com/osbuild/osbuild-composer/internal/osbuild2"
-	"github.com/osbuild/osbuild-composer/internal/ostree"
+	"github.com/osbuild/osbuild-composer/internal/environment"
+	"github.com/osbuild/osbuild-composer/internal/manifest"
+	"github.com/osbuild/osbuild-composer/internal/platform"
 	"github.com/osbuild/osbuild-composer/internal/rpmmd"
+	"github.com/osbuild/osbuild-composer/internal/workload"
 )
 
 const (
 	GigaByte = 1024 * 1024 * 1024
 	// package set names
-
-	// build package set name
-	buildPkgsKey = "build"
 
 	// main/common os image package set name
 	osPkgsKey = "packages"
@@ -78,19 +74,15 @@ var (
 		filename:    "commit.tar",
 		mimeType:    "application/x-tar",
 		packageSets: map[string]packageSetFunc{
-			buildPkgsKey: iotBuildPackageSet,
-			osPkgsKey:    iotCommitPackageSet,
-		},
-		packageSetChains: map[string][]string{
-			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+			osPkgsKey: iotCommitPackageSet,
 		},
 		defaultImageConfig: &distro.ImageConfig{
 			EnabledServices: iotServices,
 		},
 		rpmOstree:        true,
-		pipelines:        iotCommitPipelines,
+		manifest:         iotCommitManifest,
 		buildPipelines:   []string{"build"},
-		payloadPipelines: []string{"ostree-tree", "ostree-commit", "commit-archive"},
+		payloadPipelines: []string{"os", "ostree-commit", "commit-archive"},
 		exports:          []string{"commit-archive"},
 	}
 
@@ -100,23 +92,17 @@ var (
 		filename:    "container.tar",
 		mimeType:    "application/x-tar",
 		packageSets: map[string]packageSetFunc{
-			buildPkgsKey: iotBuildPackageSet,
-			osPkgsKey:    iotCommitPackageSet,
+			osPkgsKey: iotCommitPackageSet,
 			containerPkgsKey: func(t *imageType) rpmmd.PackageSet {
-				return rpmmd.PackageSet{
-					Include: []string{"nginx"},
-				}
+				return rpmmd.PackageSet{}
 			},
-		},
-		packageSetChains: map[string][]string{
-			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
 		},
 		defaultImageConfig: &distro.ImageConfig{
 			EnabledServices: iotServices,
 		},
 		rpmOstree:        true,
 		bootISO:          false,
-		pipelines:        iotContainerPipelines,
+		manifest:         iotContainerManifest,
 		buildPipelines:   []string{"build"},
 		payloadPipelines: []string{"ostree-tree", "ostree-commit", "container-tree", "container"},
 		exports:          []string{"container"},
@@ -128,12 +114,7 @@ var (
 		filename:    "installer.iso",
 		mimeType:    "application/x-iso9660-image",
 		packageSets: map[string]packageSetFunc{
-			buildPkgsKey:     iotInstallerBuildPackageSet,
-			osPkgsKey:        iotCommitPackageSet,
 			installerPkgsKey: iotInstallerPackageSet,
-		},
-		packageSetChains: map[string][]string{
-			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
 		},
 		defaultImageConfig: &distro.ImageConfig{
 			Locale:          "en_US.UTF-8",
@@ -141,7 +122,7 @@ var (
 		},
 		rpmOstree:        true,
 		bootISO:          true,
-		pipelines:        iotInstallerPipelines,
+		manifest:         iotInstallerManifest,
 		buildPipelines:   []string{"build"},
 		payloadPipelines: []string{"anaconda-tree", "bootiso-tree", "bootiso"},
 		exports:          []string{"bootiso"},
@@ -152,11 +133,7 @@ var (
 		filename: "disk.qcow2",
 		mimeType: "application/x-qemu-disk",
 		packageSets: map[string]packageSetFunc{
-			buildPkgsKey: distroBuildPackageSet,
-			osPkgsKey:    qcow2CommonPackageSet,
-		},
-		packageSetChains: map[string][]string{
-			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+			osPkgsKey: qcow2CommonPackageSet,
 		},
 		defaultImageConfig: &distro.ImageConfig{
 			DefaultTarget: "multi-user.target",
@@ -170,7 +147,7 @@ var (
 		kernelOptions:       defaultKernelOptions,
 		bootable:            true,
 		defaultSize:         2 * GigaByte,
-		pipelines:           qcow2Pipelines,
+		manifest:            qcow2Manifest,
 		buildPipelines:      []string{"build"},
 		payloadPipelines:    []string{"os", "image", "qcow2"},
 		exports:             []string{"qcow2"},
@@ -182,17 +159,12 @@ var (
 		filename: "disk.vhd",
 		mimeType: "application/x-vhd",
 		packageSets: map[string]packageSetFunc{
-			buildPkgsKey: distroBuildPackageSet,
-			osPkgsKey:    vhdCommonPackageSet,
-		},
-		packageSetChains: map[string][]string{
-			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+			osPkgsKey: vhdCommonPackageSet,
 		},
 		defaultImageConfig: &distro.ImageConfig{
 			Locale: "en_US.UTF-8",
 			EnabledServices: []string{
 				"sshd",
-				"waagent",
 			},
 			DefaultTarget: "multi-user.target",
 			DisabledServices: []string{
@@ -203,11 +175,12 @@ var (
 		kernelOptions:       defaultKernelOptions,
 		bootable:            true,
 		defaultSize:         2 * GigaByte,
-		pipelines:           vhdPipelines,
+		manifest:            vhdManifest,
 		buildPipelines:      []string{"build"},
 		payloadPipelines:    []string{"os", "image", "vpc"},
 		exports:             []string{"vpc"},
 		basePartitionTables: defaultBasePartitionTables,
+		environment:         &environment.Azure{},
 	}
 
 	vmdkImgType = imageType{
@@ -215,11 +188,7 @@ var (
 		filename: "disk.vmdk",
 		mimeType: "application/x-vmdk",
 		packageSets: map[string]packageSetFunc{
-			buildPkgsKey: distroBuildPackageSet,
-			osPkgsKey:    vmdkCommonPackageSet,
-		},
-		packageSetChains: map[string][]string{
-			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+			osPkgsKey: vmdkCommonPackageSet,
 		},
 		defaultImageConfig: &distro.ImageConfig{
 			Locale: "en_US.UTF-8",
@@ -233,7 +202,7 @@ var (
 		kernelOptions:       defaultKernelOptions,
 		bootable:            true,
 		defaultSize:         2 * GigaByte,
-		pipelines:           vmdkPipelines,
+		manifest:            vmdkManifest,
 		buildPipelines:      []string{"build"},
 		payloadPipelines:    []string{"os", "image", "vmdk"},
 		exports:             []string{"vmdk"},
@@ -245,11 +214,7 @@ var (
 		filename: "disk.qcow2",
 		mimeType: "application/x-qemu-disk",
 		packageSets: map[string]packageSetFunc{
-			buildPkgsKey: distroBuildPackageSet,
-			osPkgsKey:    openstackCommonPackageSet,
-		},
-		packageSetChains: map[string][]string{
-			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+			osPkgsKey: openstackCommonPackageSet,
 		},
 		defaultImageConfig: &distro.ImageConfig{
 			Locale: "en_US.UTF-8",
@@ -263,7 +228,7 @@ var (
 		kernelOptions:       defaultKernelOptions,
 		bootable:            true,
 		defaultSize:         2 * GigaByte,
-		pipelines:           openstackPipelines,
+		manifest:            openstackManifest,
 		buildPipelines:      []string{"build"},
 		payloadPipelines:    []string{"os", "image", "qcow2"},
 		exports:             []string{"qcow2"},
@@ -272,9 +237,6 @@ var (
 
 	// default EC2 images config (common for all architectures)
 	defaultEc2ImageConfig = &distro.ImageConfig{
-		EnabledServices: []string{
-			"cloud-init.service",
-		},
 		DefaultTarget: "multi-user.target",
 	}
 
@@ -283,22 +245,38 @@ var (
 		filename: "image.raw",
 		mimeType: "application/octet-stream",
 		packageSets: map[string]packageSetFunc{
-			buildPkgsKey: ec2BuildPackageSet,
-			osPkgsKey:    ec2CommonPackageSet,
-		},
-		packageSetChains: map[string][]string{
-			osPkgsKey: {osPkgsKey, blueprintPkgsKey},
+			osPkgsKey: ec2CommonPackageSet,
 		},
 		defaultImageConfig:  defaultEc2ImageConfig,
 		kernelOptions:       defaultKernelOptions,
 		bootable:            true,
-		bootType:            distro.LegacyBootType,
 		defaultSize:         6 * GigaByte,
-		pipelines:           ec2Pipelines,
+		manifest:            ec2Manifest,
 		buildPipelines:      []string{"build"},
 		payloadPipelines:    []string{"os", "image"},
 		exports:             []string{"image"},
 		basePartitionTables: defaultBasePartitionTables,
+		environment:         &environment.EC2{},
+	}
+
+	containerImgType = imageType{
+		name:     "container",
+		filename: "container.tar",
+		mimeType: "application/x-tar",
+		packageSets: map[string]packageSetFunc{
+			osPkgsKey: containerPackageSet,
+		},
+		defaultImageConfig: &distro.ImageConfig{
+			NoSElinux:   true,
+			ExcludeDocs: true,
+			Locale:      "C.UTF-8",
+			Timezone:    "Etc/UTC",
+		},
+		manifest:         containerManifest,
+		bootable:         false,
+		buildPipelines:   []string{"build"},
+		payloadPipelines: []string{"os", "container"},
+		exports:          []string{"container"},
 	}
 )
 
@@ -417,8 +395,6 @@ type architecture struct {
 	name             string
 	imageTypes       map[string]distro.ImageType
 	imageTypeAliases map[string]string
-	legacy           string
-	bootType         distro.BootType
 }
 
 func (a *architecture) Name() string {
@@ -449,13 +425,14 @@ func (a *architecture) GetImageType(name string) (distro.ImageType, error) {
 	return t, nil
 }
 
-func (a *architecture) addImageTypes(imageTypes ...imageType) {
+func (a *architecture) addImageTypes(platform platform.Platform, imageTypes ...imageType) {
 	if a.imageTypes == nil {
 		a.imageTypes = map[string]distro.ImageType{}
 	}
 	for idx := range imageTypes {
 		it := imageTypes[idx]
 		it.arch = a
+		it.platform = platform
 		a.imageTypes[it.name] = &it
 		for _, alias := range it.nameAliases {
 			if a.imageTypeAliases == nil {
@@ -473,25 +450,26 @@ func (a *architecture) Distro() distro.Distro {
 	return a.distro
 }
 
-type pipelinesFunc func(t *imageType, customizations *blueprint.Customizations, options distro.ImageOptions, repos []rpmmd.RepoConfig, packageSetSpecs map[string][]rpmmd.PackageSpec, rng *rand.Rand) ([]osbuild.Pipeline, error)
+type manifestFunc func(m *manifest.Manifest, workload workload.Workload, t *imageType, customizations *blueprint.Customizations, options distro.ImageOptions, repos []rpmmd.RepoConfig, packageSets map[string]rpmmd.PackageSet, rng *rand.Rand) error
 
 type packageSetFunc func(t *imageType) rpmmd.PackageSet
 
 type imageType struct {
 	arch               *architecture
+	platform           platform.Platform
+	environment        environment.Environment
 	name               string
 	nameAliases        []string
 	filename           string
 	mimeType           string
 	packageSets        map[string]packageSetFunc
-	packageSetChains   map[string][]string
 	defaultImageConfig *distro.ImageConfig
 	kernelOptions      string
 	defaultSize        uint64
 	buildPipelines     []string
 	payloadPipelines   []string
 	exports            []string
-	pipelines          pipelinesFunc
+	manifest           manifestFunc
 
 	// bootISO: installable ISO
 	bootISO bool
@@ -499,8 +477,6 @@ type imageType struct {
 	rpmOstree bool
 	// bootable image
 	bootable bool
-	// If set to a value, it is preferred over the architecture value
-	bootType distro.BootType
 	// List of valid arches for the image type
 	basePartitionTables distro.BasePartitionTableMap
 }
@@ -541,73 +517,41 @@ func (t *imageType) Size(size uint64) uint64 {
 	return size
 }
 
-func (t *imageType) getPackages(name string) rpmmd.PackageSet {
-	getter := t.packageSets[name]
-	if getter == nil {
-		return rpmmd.PackageSet{}
-	}
-
-	return getter(t)
-}
-
-func (t *imageType) PackageSets(bp blueprint.Blueprint, repos []rpmmd.RepoConfig) map[string][]rpmmd.PackageSet {
+func (t *imageType) PackageSets(bp blueprint.Blueprint, options distro.ImageOptions, repos []rpmmd.RepoConfig) map[string][]rpmmd.PackageSet {
 	// merge package sets that appear in the image type with the package sets
 	// of the same name from the distro and arch
-	mergedSets := make(map[string]rpmmd.PackageSet)
+	packageSets := make(map[string]rpmmd.PackageSet)
 
-	imageSets := t.packageSets
-
-	for name := range imageSets {
-		mergedSets[name] = t.getPackages(name)
+	for name, getter := range t.packageSets {
+		packageSets[name] = getter(t)
 	}
 
-	if _, hasPackages := imageSets[osPkgsKey]; !hasPackages {
-		// should this be possible??
-		mergedSets[osPkgsKey] = rpmmd.PackageSet{}
-	}
-
-	// every image type must define a 'build' package set
-	if _, hasBuild := imageSets[buildPkgsKey]; !hasBuild {
-		panic(fmt.Sprintf("'%s' image type has no '%s' package set defined", t.name, buildPkgsKey))
-	}
-
-	// blueprint packages
-	bpPackages := bp.GetPackages()
-	timezone, _ := bp.Customizations.GetTimezoneSettings()
-	if timezone != nil {
-		bpPackages = append(bpPackages, "chrony")
-	}
-
-	// if we have file system customization that will need to a new mount point
-	// the layout is converted to LVM so we need to corresponding packages
-	if !t.rpmOstree {
-
-		pt, exists := t.basePartitionTables[t.arch.Name()]
-		if !exists {
-			panic(fmt.Sprintf("unknown architecture with boot type: %s %s", t.arch.Name(), t.bootType))
-		}
-		haveNewMountpoint := false
-
-		if fs := bp.Customizations.GetFilesystems(); fs != nil {
-			for i := 0; !haveNewMountpoint && i < len(fs); i++ {
-				haveNewMountpoint = !pt.ContainsMountpoint(fs[i].Mountpoint)
+	// amend with repository information
+	globalRepos := make([]rpmmd.RepoConfig, 0)
+	for _, repo := range repos {
+		if len(repo.PackageSets) > 0 {
+			// only apply the repo to the listed package sets
+			for _, psName := range repo.PackageSets {
+				ps := packageSets[psName]
+				ps.Repositories = append(ps.Repositories, repo)
+				packageSets[psName] = ps
 			}
-		}
-
-		if haveNewMountpoint {
-			bpPackages = append(bpPackages, "lvm2")
+		} else {
+			// no package sets were listed, so apply the repo
+			// to all package sets
+			globalRepos = append(globalRepos, repo)
 		}
 	}
 
-	// depsolve bp packages separately
-	// bp packages aren't restricted by exclude lists
-	mergedSets[blueprintPkgsKey] = rpmmd.PackageSet{Include: bpPackages}
-	kernel := bp.Customizations.GetKernel().Name
+	// create a manifest object and instantiate it with the computed packageSetChains
+	manifest, err := t.initializeManifest(&bp, options, globalRepos, packageSets, 0)
+	if err != nil {
+		// TODO: handle manifest initialization errors more gracefully, we
+		// refuse to initialize manifests with invalid config.
+		return nil
+	}
 
-	// add bp kernel to main OS package set to avoid duplicate kernels
-	mergedSets[osPkgsKey] = mergedSets[osPkgsKey].Append(rpmmd.PackageSet{Include: []string{kernel}})
-	return distro.MakePackageSetChains(t, mergedSets, repos)
-
+	return manifest.GetPackageSetChains()
 }
 
 func (t *imageType) BuildPipelines() []string {
@@ -623,7 +567,7 @@ func (t *imageType) PayloadPackageSets() []string {
 }
 
 func (t *imageType) PackageSetsChains() map[string][]string {
-	return t.packageSetChains
+	return make(map[string][]string)
 }
 
 func (t *imageType) Exports() []string {
@@ -631,21 +575,6 @@ func (t *imageType) Exports() []string {
 		return t.exports
 	}
 	return []string{"assembler"}
-}
-
-// getBootType returns the BootType which should be used for this particular
-// combination of architecture and image type.
-func (t *imageType) getBootType() distro.BootType {
-	bootType := t.arch.bootType
-	if t.bootType != distro.UnsetBootType {
-		bootType = t.bootType
-	}
-	return bootType
-}
-
-func (t *imageType) supportsUEFI() bool {
-	bootType := t.getBootType()
-	return bootType == distro.HybridBootType || bootType == distro.UEFIBootType
 }
 
 func (t *imageType) getPartitionTable(
@@ -684,14 +613,27 @@ func (t *imageType) PartitionType() string {
 	return basePartitionTable.Type
 }
 
-func (t *imageType) Manifest(customizations *blueprint.Customizations,
+func (t *imageType) initializeManifest(bp *blueprint.Blueprint,
 	options distro.ImageOptions,
 	repos []rpmmd.RepoConfig,
-	packageSpecSets map[string][]rpmmd.PackageSpec,
-	seed int64) (distro.Manifest, error) {
+	packageSets map[string]rpmmd.PackageSet,
+	seed int64) (*manifest.Manifest, error) {
 
-	if err := t.checkOptions(customizations, options); err != nil {
-		return distro.Manifest{}, err
+	if err := t.checkOptions(bp.Customizations, options); err != nil {
+		return nil, err
+	}
+
+	// TODO: let image types specify valid workloads, rather than
+	// always assume Custom.
+	w := &workload.Custom{
+		BaseWorkload: workload.BaseWorkload{
+			Repos: packageSets[blueprintPkgsKey].Repositories,
+		},
+		Packages: bp.GetPackagesEx(false),
+	}
+	if services := bp.Customizations.GetServices(); services != nil {
+		w.Services = services.Enabled
+		w.DisabledServices = services.Disabled
 	}
 
 	source := rand.NewSource(seed)
@@ -699,57 +641,34 @@ func (t *imageType) Manifest(customizations *blueprint.Customizations,
 	/* #nosec G404 */
 	rng := rand.New(source)
 
-	pipelines, err := t.pipelines(t, customizations, options, repos, packageSpecSets, rng)
+	manifest := manifest.New()
+	err := t.manifest(&manifest, w, t, bp.Customizations, options, repos, packageSets, rng)
+	if err != nil {
+		return nil, err
+	}
+
+	return &manifest, nil
+}
+
+func (t *imageType) Manifest(customizations *blueprint.Customizations,
+	options distro.ImageOptions,
+	repos []rpmmd.RepoConfig,
+	packageSets map[string][]rpmmd.PackageSpec,
+	seed int64) (distro.Manifest, error) {
+
+	bp := &blueprint.Blueprint{}
+	err := bp.Initialize()
+	if err != nil {
+		panic("could not initialize empty blueprint: " + err.Error())
+	}
+	bp.Customizations = customizations
+
+	manifest, err := t.initializeManifest(bp, options, repos, nil, seed)
 	if err != nil {
 		return distro.Manifest{}, err
 	}
 
-	// flatten spec sets for sources
-	allPackageSpecs := make([]rpmmd.PackageSpec, 0)
-	for _, specs := range packageSpecSets {
-		allPackageSpecs = append(allPackageSpecs, specs...)
-	}
-
-	// handle OSTree commit inputs
-	var commits []ostree.CommitSource
-	if options.OSTree.Parent != "" && options.OSTree.URL != "" {
-		commits = []ostree.CommitSource{{Checksum: options.OSTree.Parent, URL: options.OSTree.URL}}
-	}
-
-	// handle inline sources
-	inlineData := []string{}
-
-	// FDO root certs, if any, are transmitted via an inline source
-	if fdo := customizations.GetFDO(); fdo != nil && fdo.DiunPubKeyRootCerts != "" {
-		inlineData = append(inlineData, fdo.DiunPubKeyRootCerts)
-	}
-
-	return json.Marshal(
-		osbuild.Manifest{
-			Version:   "2",
-			Pipelines: pipelines,
-			Sources:   osbuild2.GenSources(allPackageSpecs, commits, inlineData),
-		},
-	)
-}
-
-func isMountpointAllowed(mountpoint string) bool {
-	for _, allowed := range mountpointAllowList {
-		match, _ := path.Match(allowed, mountpoint)
-		if match {
-			return true
-		}
-		// ensure that only clean mountpoints
-		// are valid
-		if strings.Contains(mountpoint, "//") {
-			return false
-		}
-		match = strings.HasPrefix(mountpoint, allowed+"/")
-		if allowed != "/" && match {
-			return true
-		}
-	}
-	return false
+	return manifest.Serialize(packageSets)
 }
 
 // checkOptions checks the validity and compatibility of options and customizations for the image type.
@@ -779,7 +698,7 @@ func (t *imageType) checkOptions(customizations *blueprint.Customizations, optio
 
 	invalidMountpoints := []string{}
 	for _, m := range mountpoints {
-		if !isMountpointAllowed(m.Mountpoint) {
+		if !distro.IsMountpointAllowed(m.Mountpoint, mountpointAllowList) {
 			invalidMountpoints = append(invalidMountpoints, m.Mountpoint)
 		}
 	}
@@ -812,49 +731,99 @@ func newDistro(distroName string) distro.Distro {
 
 	// Architecture definitions
 	x86_64 := architecture{
-		name:     distro.X86_64ArchName,
-		distro:   &rd,
-		legacy:   "i386-pc",
-		bootType: distro.HybridBootType,
+		name:   distro.X86_64ArchName,
+		distro: &rd,
 	}
 
 	aarch64 := architecture{
-		name:     distro.Aarch64ArchName,
-		distro:   &rd,
-		bootType: distro.UEFIBootType,
+		name:   distro.Aarch64ArchName,
+		distro: &rd,
 	}
 
 	s390x := architecture{
-		distro:   &rd,
-		name:     distro.S390xArchName,
-		bootType: distro.LegacyBootType,
+		distro: &rd,
+		name:   distro.S390xArchName,
 	}
 
 	ociImgType := qcow2ImgType
 	ociImgType.name = "oci"
 
 	x86_64.addImageTypes(
-		amiImgType,
+		&platform.X86{
+			BIOS:       true,
+			UEFIVendor: "fedora",
+		},
 		qcow2ImgType,
 		openstackImgType,
 		vhdImgType,
 		vmdkImgType,
 		ociImgType,
+	)
+	x86_64.addImageTypes(
+		&platform.X86{
+			BIOS: true,
+		},
+		amiImgType,
+	)
+	x86_64.addImageTypes(
+		&platform.X86{},
+		containerImgType,
+	)
+	x86_64.addImageTypes(
+		&platform.X86{
+			BasePlatform: platform.BasePlatform{
+				FirmwarePackages: []string{
+					"microcode_ctl", // ??
+					"iwl1000-firmware",
+					"iwl100-firmware",
+					"iwl105-firmware",
+					"iwl135-firmware",
+					"iwl2000-firmware",
+					"iwl2030-firmware",
+					"iwl3160-firmware",
+					"iwl5000-firmware",
+					"iwl5150-firmware",
+					"iwl6000-firmware",
+					"iwl6050-firmware",
+				},
+			},
+			BIOS:       true,
+			UEFIVendor: "fedora",
+		},
 		iotOCIImgType,
 		iotCommitImgType,
 		iotInstallerImgType,
 	)
 	aarch64.addImageTypes(
+		&platform.Aarch64{
+			UEFIVendor: "fedora",
+		},
 		amiImgType,
 		qcow2ImgType,
 		openstackImgType,
 		ociImgType,
+	)
+	aarch64.addImageTypes(
+		&platform.Aarch64{},
+		containerImgType,
+	)
+	aarch64.addImageTypes(
+		&platform.Aarch64{
+			BasePlatform: platform.BasePlatform{
+				FirmwarePackages: []string{
+					"uboot-images-armv8", // ??
+					"bcm283x-firmware",
+					"arm-image-installer", // ??
+				},
+			},
+			UEFIVendor: "fedora",
+		},
 		iotCommitImgType,
 		iotOCIImgType,
 		iotInstallerImgType,
 	)
 
-	s390x.addImageTypes()
+	s390x.addImageTypes(nil)
 
 	rd.addArches(x86_64, aarch64, s390x)
 	return &rd

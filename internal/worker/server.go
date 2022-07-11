@@ -17,11 +17,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/osbuild/osbuild-composer/pkg/jobqueue"
 	"github.com/sirupsen/logrus"
 
 	"github.com/osbuild/osbuild-composer/internal/auth"
 	"github.com/osbuild/osbuild-composer/internal/common"
-	"github.com/osbuild/osbuild-composer/internal/jobqueue"
 	"github.com/osbuild/osbuild-composer/internal/prometheus"
 	"github.com/osbuild/osbuild-composer/internal/worker/api"
 	"github.com/osbuild/osbuild-composer/internal/worker/clienterrors"
@@ -100,7 +100,17 @@ func (s *Server) WatchHeartbeats() {
 		for _, token := range s.jobs.Heartbeats(time.Second * 120) {
 			id, _ := s.jobs.IdFromToken(token)
 			logrus.Infof("Removing unresponsive job: %s\n", id)
-			err := s.FinishJob(token, nil)
+
+			missingHeartbeatResult := JobResult{
+				JobError: clienterrors.WorkerClientError(clienterrors.ErrorJobMissingHeartbeat, "Worker running this job stopped responding."),
+			}
+
+			resJson, err := json.Marshal(missingHeartbeatResult)
+			if err != nil {
+				logrus.Panicf("Cannot marshal the heartbeat error: %v", err)
+			}
+
+			err = s.FinishJob(token, resJson)
 			if err != nil {
 				logrus.Errorf("Error finishing unresponsive job: %v", err)
 			}
@@ -248,8 +258,8 @@ func (s *Server) OSBuildJobStatus(id uuid.UUID, result *OSBuildJobResult) (*JobS
 			result.JobError = clienterrors.WorkerClientError(clienterrors.ErrorBuildJob, "osbuild build failed")
 		} else if len(result.OSBuildOutput.Error) > 0 {
 			result.JobError = clienterrors.WorkerClientError(clienterrors.ErrorOldResultCompatible, string(result.OSBuildOutput.Error))
-		} else if len(result.TargetErrors) > 0 {
-			result.JobError = clienterrors.WorkerClientError(clienterrors.ErrorOldResultCompatible, result.TargetErrors[0])
+		} else if len(result.TargetErrors()) > 0 {
+			result.JobError = clienterrors.WorkerClientError(clienterrors.ErrorTargetError, "at least one target failed", result.TargetErrors())
 		}
 	}
 	// For backwards compatibility: OSBuildJobResult didn't use to have a

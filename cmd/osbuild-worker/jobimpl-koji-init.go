@@ -12,24 +12,23 @@ import (
 )
 
 type KojiInitJobImpl struct {
-	KojiServers        map[string]koji.GSSAPICredentials
-	relaxTimeoutFactor uint
+	KojiServers map[string]kojiServer
 }
 
 func (impl *KojiInitJobImpl) kojiInit(server, name, version, release string) (string, uint64, error) {
-	transport := koji.CreateKojiTransport(impl.relaxTimeoutFactor)
 
 	serverURL, err := url.Parse(server)
 	if err != nil {
 		return "", 0, err
 	}
 
-	creds, exists := impl.KojiServers[serverURL.Hostname()]
+	kojiServer, exists := impl.KojiServers[serverURL.Hostname()]
 	if !exists {
 		return "", 0, fmt.Errorf("Koji server has not been configured: %s", serverURL.Hostname())
 	}
 
-	k, err := koji.NewFromGSSAPI(server, &creds, transport)
+	transport := koji.CreateKojiTransport(kojiServer.relaxTimeoutFactor)
+	k, err := koji.NewFromGSSAPI(server, &kojiServer.creds, transport)
 	if err != nil {
 		return "", 0, err
 	}

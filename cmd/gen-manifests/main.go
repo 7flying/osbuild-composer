@@ -24,8 +24,6 @@ import (
 	"github.com/osbuild/osbuild-composer/internal/rpmmd"
 )
 
-const cacheRoot = "/tmp/rpmmd"
-
 type repository struct {
 	Name           string   `json:"name"`
 	BaseURL        string   `json:"baseurl,omitempty"`
@@ -94,7 +92,7 @@ func loadFormatRequestMap() formatRequestMap {
 
 type manifestJob func(chan string) error
 
-func makeManifestJob(name string, imgType distro.ImageType, cr composeRequest, distribution distro.Distro, archName string, seedArg int64, path string) manifestJob {
+func makeManifestJob(name string, imgType distro.ImageType, cr composeRequest, distribution distro.Distro, archName string, seedArg int64, path string, cacheRoot string) manifestJob {
 	distroName := distribution.Name()
 	u := func(s string) string {
 		return strings.Replace(s, "-", "_", -1)
@@ -119,7 +117,7 @@ func makeManifestJob(name string, imgType distro.ImageType, cr composeRequest, d
 			bp = blueprint.Blueprint(*cr.Blueprint)
 		}
 
-		packageSpecs, err := depsolve(cacheDir, imgType, bp, repos, distribution, archName)
+		packageSpecs, err := depsolve(cacheDir, imgType, bp, options, repos, distribution, archName)
 		if err != nil {
 			return fmt.Errorf("[%s] depsolve failed: %s", filename, err.Error())
 		}
@@ -189,10 +187,10 @@ func readRepos() DistroArchRepoMap {
 	return darm
 }
 
-func depsolve(cacheDir string, imageType distro.ImageType, bp blueprint.Blueprint, repos []rpmmd.RepoConfig, d distro.Distro, arch string) (map[string][]rpmmd.PackageSpec, error) {
+func depsolve(cacheDir string, imageType distro.ImageType, bp blueprint.Blueprint, options distro.ImageOptions, repos []rpmmd.RepoConfig, d distro.Distro, arch string) (map[string][]rpmmd.PackageSpec, error) {
 	solver := dnfjson.NewSolver(d.ModulePlatformID(), d.Releasever(), arch, cacheDir)
 	solver.SetDNFJSONPath("./dnf-json")
-	packageSets := imageType.PackageSets(bp, repos)
+	packageSets := imageType.PackageSets(bp, options, repos)
 	depsolvedSets := make(map[string][]rpmmd.PackageSpec)
 	for name, pkgSet := range packageSets {
 		res, err := solver.Depsolve(pkgSet)
@@ -307,12 +305,14 @@ func mergeOverrides(base, overrides composeRequest) composeRequest {
 }
 
 func main() {
-	outputDirFlag := flag.String("output", "test/data/manifests.plain/", "")
-	nWorkersFlag := flag.Int("workers", 16, "")
+	outputDirFlag := flag.String("output", "test/data/manifests.plain/", "manifest store directory")
+	nWorkersFlag := flag.Int("workers", 16, "number of workers to run concurrently")
+	cacheRootFlag := flag.String("cache", "/tmp/rpmmd", "rpm metadata cache directory")
 	flag.Parse()
 
 	outputDir := *outputDirFlag
 	nWorkers := *nWorkersFlag
+	cacheRoot := *cacheRootFlag
 
 	seedArg := int64(0)
 	darm := readRepos()
@@ -363,7 +363,7 @@ func main() {
 					composeReq := req.ComposeRequest
 					composeReq.Repositories = filterRepos(repos, imgTypeName)
 
-					job := makeManifestJob(jobName, imgType, composeReq, distribution, archName, seedArg, outputDir)
+					job := makeManifestJob(jobName, imgType, composeReq, distribution, archName, seedArg, outputDir, cacheRoot)
 					jobs = append(jobs, job)
 				}
 			}

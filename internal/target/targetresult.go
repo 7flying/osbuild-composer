@@ -3,14 +3,17 @@ package target
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/osbuild/osbuild-composer/internal/worker/clienterrors"
 )
 
 type TargetResult struct {
-	Name    string              `json:"name"`
-	Options TargetResultOptions `json:"options"`
+	Name        TargetName          `json:"name"`
+	Options     TargetResultOptions `json:"options,omitempty"`
+	TargetError *clienterrors.Error `json:"target_error,omitempty"`
 }
 
-func newTargetResult(name string, options TargetResultOptions) *TargetResult {
+func newTargetResult(name TargetName, options TargetResultOptions) *TargetResult {
 	return &TargetResult{
 		Name:    name,
 		Options: options,
@@ -22,8 +25,9 @@ type TargetResultOptions interface {
 }
 
 type rawTargetResult struct {
-	Name    string          `json:"name"`
-	Options json.RawMessage `json:"options"`
+	Name        TargetName          `json:"name"`
+	Options     json.RawMessage     `json:"options,omitempty"`
+	TargetError *clienterrors.Error `json:"target_error,omitempty"`
 }
 
 func (targetResult *TargetResult) UnmarshalJSON(data []byte) error {
@@ -32,30 +36,36 @@ func (targetResult *TargetResult) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	options, err := UnmarshalTargetResultOptions(rawTR.Name, rawTR.Options)
-	if err != nil {
-		return err
+	var options TargetResultOptions
+	// No options may be set if there was a target error.
+	// In addition, some targets don't set any options.
+	if len(rawTR.Options) > 0 {
+		options, err = UnmarshalTargetResultOptions(rawTR.Name, rawTR.Options)
+		if err != nil {
+			return err
+		}
 	}
 
 	targetResult.Name = rawTR.Name
 	targetResult.Options = options
+	targetResult.TargetError = rawTR.TargetError
 	return nil
 }
 
-func UnmarshalTargetResultOptions(trName string, rawOptions json.RawMessage) (TargetResultOptions, error) {
+func UnmarshalTargetResultOptions(trName TargetName, rawOptions json.RawMessage) (TargetResultOptions, error) {
 	var options TargetResultOptions
 	switch trName {
-	case "org.osbuild.aws":
+	case TargetNameAWS:
 		options = new(AWSTargetResultOptions)
-	case "org.osbuild.aws.s3":
+	case TargetNameAWSS3:
 		options = new(AWSS3TargetResultOptions)
-	case "org.osbuild.gcp":
+	case TargetNameGCP:
 		options = new(GCPTargetResultOptions)
-	case "org.osbuild.azure.image":
+	case TargetNameAzureImage:
 		options = new(AzureImageTargetResultOptions)
-	case "org.osbuild.koji":
+	case TargetNameKoji:
 		options = new(KojiTargetResultOptions)
-	case "org.osbuild.oci":
+	case TargetNameOCI:
 		options = new(OCITargetResultOptions)
 	default:
 		return nil, fmt.Errorf("unexpected target result name: %s", trName)

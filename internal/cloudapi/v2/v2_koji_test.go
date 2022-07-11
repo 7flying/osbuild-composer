@@ -477,7 +477,7 @@ func TestKojiCompose(t *testing.T) {
 				require.NoError(t, err)
 				jobTarget := osbuildJob.Targets[0].Options.(*target.KojiTargetOptions)
 				require.Equal(t, "koji.example.com", jobTarget.Server)
-				require.Equal(t, "test.img", jobTarget.Filename)
+				require.Equal(t, "test.img", osbuildJob.Targets[0].OsbuildArtifact.ExportFilename)
 				require.Equal(t, fmt.Sprintf("%s-%s-%s.%s.img", name, version, release, test_distro.TestArch3Name),
 					osbuildJob.Targets[0].ImageName)
 				require.NotEmpty(t, jobTarget.UploadDirectory)
@@ -596,14 +596,14 @@ func TestKojiJobTypeValidation(t *testing.T) {
 	buildJobIDs := make([]uuid.UUID, nImages)
 	filenames := make([]string, nImages)
 	for idx := 0; idx < nImages; idx++ {
-		fname := fmt.Sprintf("image-file-%04d", idx)
+		kojiTarget := target.NewKojiTarget(&target.KojiTargetOptions{
+			Server:          "test-server",
+			UploadDirectory: "koji-server-test-dir",
+		})
+		kojiTarget.OsbuildArtifact.ExportFilename = "test.img"
+		kojiTarget.ImageName = fmt.Sprintf("image-file-%04d", idx)
 		buildJob := worker.OSBuildJob{
-			ImageName: fmt.Sprintf("build-job-%04d", idx),
-			Targets: []*target.Target{target.NewKojiTarget(&target.KojiTargetOptions{
-				Server:          "test-server",
-				UploadDirectory: "koji-server-test-dir",
-				Filename:        fname,
-			})},
+			Targets: []*target.Target{kojiTarget},
 			// Add an empty manifest as a static job argument to make the test pass.
 			// Becasue of a bug in the API, the test was passing even without
 			// any manifest being attached to the job (static or dynamic).
@@ -616,7 +616,7 @@ func TestKojiJobTypeValidation(t *testing.T) {
 
 		buildJobs[idx] = buildJob
 		buildJobIDs[idx] = buildID
-		filenames[idx] = fname
+		filenames[idx] = kojiTarget.OsbuildArtifact.ExportFilename
 	}
 
 	finalizeJob := worker.KojiFinalizeJob{
@@ -642,13 +642,13 @@ func TestKojiJobTypeValidation(t *testing.T) {
 		test.TestRoute(t, handler, false, "GET", fmt.Sprintf("/api/image-builder-composer/v2/composes/%s%s", finalizeID, path), ``, http.StatusOK, "*")
 
 		// The other IDs should fail
-		test.TestRoute(t, handler, false, "GET", fmt.Sprintf("/api/image-builder-composer/v2/composes/%s%s", initID, path), ``, http.StatusNotFound, `{"code":"IMAGE-BUILDER-COMPOSER-26","href":"/api/image-builder-composer/v2/errors/26","id":"26","kind":"Error","reason":"Requested job has invalid type"}`, `operation_id`)
+		test.TestRoute(t, handler, false, "GET", fmt.Sprintf("/api/image-builder-composer/v2/composes/%s%s", initID, path), ``, http.StatusNotFound, `{"code":"IMAGE-BUILDER-COMPOSER-26", "details": "", "href":"/api/image-builder-composer/v2/errors/26","id":"26","kind":"Error","reason":"Requested job has invalid type"}`, `operation_id`)
 
 		for _, buildID := range buildJobIDs {
 			test.TestRoute(t, handler, false, "GET", fmt.Sprintf("/api/image-builder-composer/v2/composes/%s%s", buildID, path), ``, http.StatusOK, "*")
 		}
 
 		badID := uuid.New()
-		test.TestRoute(t, handler, false, "GET", fmt.Sprintf("/api/image-builder-composer/v2/composes/%s%s", badID, path), ``, http.StatusNotFound, `{"code":"IMAGE-BUILDER-COMPOSER-15","href":"/api/image-builder-composer/v2/errors/15","id":"15","kind":"Error","reason":"Compose with given id not found"}`, `operation_id`)
+		test.TestRoute(t, handler, false, "GET", fmt.Sprintf("/api/image-builder-composer/v2/composes/%s%s", badID, path), ``, http.StatusNotFound, `{"code":"IMAGE-BUILDER-COMPOSER-15", "details": "", "href":"/api/image-builder-composer/v2/errors/15","id":"15","kind":"Error","reason":"Compose with given id not found"}`, `operation_id`)
 	}
 }

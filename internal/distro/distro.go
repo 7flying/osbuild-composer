@@ -3,6 +3,8 @@ package distro
 import (
 	"encoding/json"
 	"fmt"
+	"path"
+	"strings"
 
 	"github.com/osbuild/osbuild-composer/internal/blueprint"
 	"github.com/osbuild/osbuild-composer/internal/disk"
@@ -99,7 +101,7 @@ type ImageType interface {
 	// Returns the sets of packages to include and exclude when building the image.
 	// Indexed by a string label. How each set is labeled and used depends on the
 	// image type.
-	PackageSets(bp blueprint.Blueprint, repos []rpmmd.RepoConfig) map[string][]rpmmd.PackageSet
+	PackageSets(bp blueprint.Blueprint, options ImageOptions, repos []rpmmd.RepoConfig) map[string][]rpmmd.PackageSet
 
 	// Returns the names of the pipelines that set up the build environment (buildroot).
 	BuildPipelines() []string
@@ -256,4 +258,23 @@ func MakePackageSetChains(t ImageType, packageSets map[string]rpmmd.PackageSet, 
 	}
 
 	return chainedSets
+}
+
+func IsMountpointAllowed(mountpoint string, allowlist []string) bool {
+	for _, allowed := range allowlist {
+		match, _ := path.Match(allowed, mountpoint)
+		if match {
+			return true
+		}
+		// ensure that only clean mountpoints
+		// are valid
+		if strings.Contains(mountpoint, "//") {
+			return false
+		}
+		match = strings.HasPrefix(mountpoint, allowed+"/")
+		if allowed != "/" && match {
+			return true
+		}
+	}
+	return false
 }

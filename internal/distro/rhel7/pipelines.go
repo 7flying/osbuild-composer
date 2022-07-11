@@ -46,6 +46,13 @@ func osPipeline(t *imageType,
 
 	rpmOptions := osbuild.NewRPMStageOptions(repos)
 	rpmOptions.GPGKeysFromTree = imageConfig.GPGKeyFiles
+
+	if imageConfig.ExcludeDocs {
+		if rpmOptions.Exclude == nil {
+			rpmOptions.Exclude = &osbuild.Exclude{}
+		}
+		rpmOptions.Exclude.Docs = true
+	}
 	p.AddStage(osbuild.NewRPMStage(rpmOptions, osbuild.NewRpmStageSourceFilesInputs(packages)))
 
 	// Difference to RHEL8, 9 pipelines: no BLS stage
@@ -285,7 +292,9 @@ func osPipeline(t *imageType,
 		p.AddStage(bootloader)
 	}
 
-	p.AddStage(osbuild.NewSELinuxStage(selinuxStageOptions(false)))
+	if !imageConfig.NoSElinux {
+		p.AddStage(osbuild.NewSELinuxStage(selinuxStageOptions(false)))
+	}
 
 	return p, nil
 }

@@ -62,10 +62,9 @@ type azureUploadSettings struct {
 func (azureUploadSettings) isUploadSettings() {}
 
 type gcpUploadSettings struct {
-	Filename string `json:"filename"`
-	Region   string `json:"region"`
-	Bucket   string `json:"bucket"`
-	Object   string `json:"object"`
+	Region string `json:"region"`
+	Bucket string `json:"bucket"`
+	Object string `json:"object"`
 
 	// base64 encoded GCP credentials JSON file
 	Credentials string `json:"credentials,omitempty"`
@@ -96,6 +95,15 @@ type ociUploadSettings struct {
 }
 
 func (ociUploadSettings) isUploadSettings() {}
+
+type containerUploadSettings struct {
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+
+	TlsVerify *bool `json:"tls_verify,omitempty"`
+}
+
+func (containerUploadSettings) isUploadSettings() {}
 
 type uploadRequest struct {
 	Provider  string         `json:"provider"`
@@ -134,6 +142,8 @@ func (u *uploadRequest) UnmarshalJSON(data []byte) error {
 		// While the API still accepts provider type "generic.s3", the request is handled
 		// in the same way as for a request with provider type "aws.s3"
 		settings = new(awsS3UploadSettings)
+	case "container":
+		settings = new(containerUploadSettings)
 	default:
 		return errors.New("unexpected provider name")
 	}
@@ -197,10 +207,9 @@ func targetsToUploadResponses(targets []*target.Target, state ComposeState) []up
 		case *target.GCPTargetOptions:
 			upload.ProviderName = "gcp"
 			upload.Settings = &gcpUploadSettings{
-				Filename: options.Filename,
-				Region:   options.Region,
-				Bucket:   options.Bucket,
-				Object:   options.Object,
+				Region: options.Region,
+				Bucket: options.Bucket,
+				Object: options.Object,
 				// Credentials are intentionally not included.
 			}
 			uploads = append(uploads, upload)
@@ -234,14 +243,15 @@ func uploadRequestToTarget(u uploadRequest, imageType distro.ImageType) *target.
 
 	t.Uuid = uuid.New()
 	t.ImageName = u.ImageName
+	t.OsbuildArtifact.ExportFilename = imageType.Filename()
+	t.OsbuildArtifact.ExportName = imageType.Exports()[0]
 	t.Status = common.IBWaiting
 	t.Created = time.Now()
 
 	switch options := u.Settings.(type) {
 	case *awsUploadSettings:
-		t.Name = "org.osbuild.aws"
+		t.Name = target.TargetNameAWS
 		t.Options = &target.AWSTargetOptions{
-			Filename:        imageType.Filename(),
 			Region:          options.Region,
 			AccessKeyID:     options.AccessKeyID,
 			SecretAccessKey: options.SecretAccessKey,
@@ -250,9 +260,8 @@ func uploadRequestToTarget(u uploadRequest, imageType distro.ImageType) *target.
 			Key:             options.Key,
 		}
 	case *awsS3UploadSettings:
-		t.Name = "org.osbuild.aws.s3"
+		t.Name = target.TargetNameAWSS3
 		t.Options = &target.AWSS3TargetOptions{
-			Filename:            imageType.Filename(),
 			Region:              options.Region,
 			AccessKeyID:         options.AccessKeyID,
 			SecretAccessKey:     options.SecretAccessKey,
@@ -264,15 +273,14 @@ func uploadRequestToTarget(u uploadRequest, imageType distro.ImageType) *target.
 			SkipSSLVerification: options.SkipSSLVerification,
 		}
 	case *azureUploadSettings:
-		t.Name = "org.osbuild.azure"
+		t.Name = target.TargetNameAzure
 		t.Options = &target.AzureTargetOptions{
-			Filename:         imageType.Filename(),
 			StorageAccount:   options.StorageAccount,
 			StorageAccessKey: options.StorageAccessKey,
 			Container:        options.Container,
 		}
 	case *gcpUploadSettings:
-		t.Name = "org.osbuild.gcp"
+		t.Name = target.TargetNameGCP
 
 		var gcpCredentials []byte
 		var err error
@@ -291,7 +299,6 @@ func uploadRequestToTarget(u uploadRequest, imageType distro.ImageType) *target.
 		}
 
 		t.Options = &target.GCPTargetOptions{
-			Filename:    imageType.Filename(),
 			Region:      options.Region,
 			Os:          imageType.Arch().Distro().Name(),
 			Bucket:      options.Bucket,
@@ -299,9 +306,8 @@ func uploadRequestToTarget(u uploadRequest, imageType distro.ImageType) *target.
 			Credentials: gcpCredentials,
 		}
 	case *vmwareUploadSettings:
-		t.Name = "org.osbuild.vmware"
+		t.Name = target.TargetNameVMWare
 		t.Options = &target.VMWareTargetOptions{
-			Filename:   imageType.Filename(),
 			Username:   options.Username,
 			Password:   options.Password,
 			Host:       options.Host,
@@ -310,17 +316,24 @@ func uploadRequestToTarget(u uploadRequest, imageType distro.ImageType) *target.
 			Datastore:  options.Datastore,
 		}
 	case *ociUploadSettings:
-		t.Name = "org.osbuild.oci"
+		t.Name = target.TargetNameOCI
 		t.Options = &target.OCITargetOptions{
 			User:        options.User,
 			Tenancy:     options.Tenancy,
 			Region:      options.Region,
-			FileName:    imageType.Filename(),
 			PrivateKey:  options.PrivateKey,
 			Fingerprint: options.Fingerprint,
 			Bucket:      options.Bucket,
 			Namespace:   options.Namespace,
 			Compartment: options.Compartment,
+		}
+	case *containerUploadSettings:
+		t.Name = target.TargetNameContainer
+		t.Options = &target.ContainerTargetOptions{
+			Username: options.Username,
+			Password: options.Password,
+
+			TlsVerify: options.TlsVerify,
 		}
 	}
 

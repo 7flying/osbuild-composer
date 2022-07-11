@@ -119,6 +119,15 @@ build:
 	go build -o bin/osbuild-upload-generic-s3 ./cmd/osbuild-upload-generic-s3/
 	go build -o bin/osbuild-mock-openid-provider ./cmd/osbuild-mock-openid-provider
 	go build -o bin/osbuild-service-maintenance ./cmd/osbuild-service-maintenance
+	go test -c -tags=integration -o bin/osbuild-composer-cli-tests ./cmd/osbuild-composer-cli-tests/main_test.go
+	go test -c -tags=integration -o bin/osbuild-weldr-tests ./internal/client/
+	go test -c -tags=integration -o bin/osbuild-dnf-json-tests ./cmd/osbuild-dnf-json-tests/main_test.go
+	go test -c -tags=integration -o bin/osbuild-image-tests ./cmd/osbuild-image-tests/
+	go test -c -tags=integration -o bin/osbuild-auth-tests ./cmd/osbuild-auth-tests/
+	go test -c -tags=integration -o bin/osbuild-koji-tests ./cmd/osbuild-koji-tests/
+	go test -c -tags=integration -o bin/osbuild-composer-dbjobqueue-tests ./cmd/osbuild-composer-dbjobqueue-tests/
+	go test -c -tags=integration -o bin/osbuild-composer-maintenance-tests ./cmd/osbuild-service-maintenance/
+	go test -c -tags=integration -o bin/osbuild-composer-manifest-tests ./cmd/osbuild-composer-manifest-tests/
 
 .PHONY: install
 install:
@@ -206,6 +215,7 @@ RPM_TARBALL=rpmbuild/SOURCES/osbuild-composer-$(COMMIT).tar.gz
 $(RPM_SPECFILE):
 	mkdir -p $(CURDIR)/rpmbuild/SPECS
 	git show HEAD:osbuild-composer.spec > $(RPM_SPECFILE)
+	./tools/rpm_spec_add_provides_bundle.sh $(RPM_SPECFILE)
 
 $(RPM_TARBALL):
 	mkdir -p $(CURDIR)/rpmbuild/SOURCES

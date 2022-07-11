@@ -28,13 +28,13 @@ import (
 	"github.com/gobwas/glob"
 	"github.com/google/uuid"
 	"github.com/julienschmidt/httprouter"
+	"github.com/osbuild/osbuild-composer/pkg/jobqueue"
 
 	"github.com/osbuild/osbuild-composer/internal/blueprint"
 	"github.com/osbuild/osbuild-composer/internal/common"
 	"github.com/osbuild/osbuild-composer/internal/distro"
 	"github.com/osbuild/osbuild-composer/internal/distroregistry"
 	"github.com/osbuild/osbuild-composer/internal/dnfjson"
-	"github.com/osbuild/osbuild-composer/internal/jobqueue"
 	osbuild "github.com/osbuild/osbuild-composer/internal/osbuild2"
 	"github.com/osbuild/osbuild-composer/internal/ostree"
 	"github.com/osbuild/osbuild-composer/internal/reporegistry"
@@ -2128,7 +2128,7 @@ func (api *API) blueprintsTagHandler(writer http.ResponseWriter, request *http.R
 // depsolveBlueprintForImageType handles depsolving the blueprint package list and
 // the packages required for the image type.
 // NOTE: The imageType *must* be from the same distribution as the blueprint.
-func (api *API) depsolveBlueprintForImageType(bp blueprint.Blueprint, imageType distro.ImageType) (map[string][]rpmmd.PackageSpec, error) {
+func (api *API) depsolveBlueprintForImageType(bp blueprint.Blueprint, options distro.ImageOptions, imageType distro.ImageType) (map[string][]rpmmd.PackageSpec, error) {
 	// Depsolve using the host distro if none has been specified
 	if bp.Distro == "" {
 		bp.Distro = api.hostDistroName
@@ -2146,7 +2146,7 @@ func (api *API) depsolveBlueprintForImageType(bp blueprint.Blueprint, imageType 
 	releasever := imageType.Arch().Distro().Releasever()
 	solver := api.solver.NewWithConfig(platformID, releasever, api.archName)
 
-	packageSets := imageType.PackageSets(bp, imageTypeRepos)
+	packageSets := imageType.PackageSets(bp, options, imageTypeRepos)
 	depsolvedSets := make(map[string][]rpmmd.PackageSpec, len(packageSets))
 
 	for name, pkgSet := range packageSets {
@@ -2247,10 +2247,17 @@ func (api *API) composeHandler(writer http.ResponseWriter, request *http.Request
 	composeID := uuid.New()
 
 	var targets []*target.Target
+	// Always instruct the worker to upload the artifact back to the server
+	workerServerTarget := target.NewWorkerServerTarget()
+	workerServerTarget.ImageName = imageType.Filename()
+	workerServerTarget.OsbuildArtifact.ExportFilename = imageType.Filename()
+	workerServerTarget.OsbuildArtifact.ExportName = imageType.Exports()[0]
+	targets = append(targets, workerServerTarget)
 	if isRequestVersionAtLeast(params, 1) && cr.Upload != nil {
 		t := uploadRequestToTarget(*cr.Upload, imageType)
 		targets = append(targets, t)
 	}
+
 	// Check for test parameter
 	q, err := url.ParseQuery(request.URL.RawQuery)
 	if err != nil {
@@ -2279,16 +2286,6 @@ func (api *API) composeHandler(writer http.ResponseWriter, request *http.Request
 		cr.OSTree = ostreeParams
 	}
 
-	packageSets, err := api.depsolveBlueprintForImageType(*bp, imageType)
-	if err != nil {
-		errors := responseError{
-			ID:  "DepsolveError",
-			Msg: err.Error(),
-		}
-		statusResponseError(writer, http.StatusInternalServerError, errors)
-		return
-	}
-
 	var size uint64
 
 	// check if filesytem customizations have been set.
@@ -2306,6 +2303,25 @@ func (api *API) composeHandler(writer http.ResponseWriter, request *http.Request
 	}
 	seed := bigSeed.Int64()
 
+	options := distro.ImageOptions{
+		Size: size,
+		OSTree: ostree.RequestParams{
+			Ref:    cr.OSTree.Ref,
+			Parent: cr.OSTree.Parent,
+			URL:    cr.OSTree.URL,
+		},
+	}
+
+	packageSets, err := api.depsolveBlueprintForImageType(*bp, options, imageType)
+	if err != nil {
+		errors := responseError{
+			ID:  "DepsolveError",
+			Msg: err.Error(),
+		}
+		statusResponseError(writer, http.StatusInternalServerError, errors)
+		return
+	}
+
 	imageRepos, err := api.allRepositoriesByImageType(imageType)
 	// this should not happen if the api.depsolveBlueprintForImageType() call above worked
 	if err != nil {
@@ -2318,14 +2334,7 @@ func (api *API) composeHandler(writer http.ResponseWriter, request *http.Request
 	}
 
 	manifest, err := imageType.Manifest(bp.Customizations,
-		distro.ImageOptions{
-			Size: size,
-			OSTree: ostree.RequestParams{
-				Ref:    cr.OSTree.Ref,
-				Parent: cr.OSTree.Parent,
-				URL:    cr.OSTree.URL,
-			},
-		},
+		options,
 		imageRepos,
 		packageSets,
 		seed)
@@ -2338,27 +2347,34 @@ func (api *API) composeHandler(writer http.ResponseWriter, request *http.Request
 		return
 	}
 
+	var packages []rpmmd.PackageSpec
+	// TODO: introduce a way to query these from the manifest / image type
+	// BUG: installer/container image types will have empty package sets
+	if packages = packageSets["packages"]; len(packages) == 0 {
+		if packages = packageSets["os"]; len(packages) == 0 {
+			packages = packageSets["ostree-tree"]
+		}
+	}
+
 	if testMode == "1" {
 		// Create a failed compose
-		err = api.store.PushTestCompose(composeID, manifest, imageType, bp, size, targets, false, packageSets["packages"])
+		err = api.store.PushTestCompose(composeID, manifest, imageType, bp, size, targets, false, packages)
 	} else if testMode == "2" {
 		// Create a successful compose
-		err = api.store.PushTestCompose(composeID, manifest, imageType, bp, size, targets, true, packageSets["packages"])
+		err = api.store.PushTestCompose(composeID, manifest, imageType, bp, size, targets, true, packages)
 	} else {
 		var jobId uuid.UUID
 
 		jobId, err = api.workers.EnqueueOSBuild(api.archName, &worker.OSBuildJob{
-			Manifest:  manifest,
-			Targets:   targets,
-			ImageName: imageType.Filename(),
-			Exports:   imageType.Exports(),
+			Manifest: manifest,
+			Targets:  targets,
 			PipelineNames: &worker.PipelineNames{
 				Build:   imageType.BuildPipelines(),
 				Payload: imageType.PayloadPipelines(),
 			},
 		}, "")
 		if err == nil {
-			err = api.store.PushCompose(composeID, manifest, imageType, bp, size, targets, jobId, packageSets["packages"])
+			err = api.store.PushCompose(composeID, manifest, imageType, bp, size, targets, jobId, packages)
 		}
 	}
 

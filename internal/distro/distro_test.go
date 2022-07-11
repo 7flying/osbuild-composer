@@ -8,6 +8,7 @@ import (
 	"github.com/osbuild/osbuild-composer/internal/distro"
 	"github.com/osbuild/osbuild-composer/internal/distro/distro_test_common"
 	"github.com/osbuild/osbuild-composer/internal/distroregistry"
+	"github.com/osbuild/osbuild-composer/internal/ostree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -116,9 +117,28 @@ func TestImageType_PackageSetsChains(t *testing.T) {
 					imageType, err := arch.GetImageType(imageTypeName)
 					require.Nil(t, err)
 
-					imagePkgSets := imageType.PackageSets(blueprint.Blueprint{}, nil)
+					imagePkgSets := imageType.PackageSets(blueprint.Blueprint{}, distro.ImageOptions{
+						OSTree: ostree.RequestParams{
+							URL:    "foo",
+							Ref:    "bar",
+							Parent: "baz",
+						},
+					}, nil)
 					for packageSetName := range imageType.PackageSetsChains() {
 						_, ok := imagePkgSets[packageSetName]
+						if !ok {
+							// in the new pipeline generation logic the name of the package
+							// set chains are taken from the pipelines and do not match the
+							// package set names.
+							// TODO: redefine package set chains to make this unneccesary
+							switch packageSetName {
+							case "packages":
+								_, ok = imagePkgSets["os"]
+								if !ok {
+									_, ok = imagePkgSets["ostree-tree"]
+								}
+							}
+						}
 						assert.Truef(t, ok, "package set %q defined in a package set chain is not present in the image package sets", packageSetName)
 					}
 				})
