@@ -207,7 +207,7 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 			{
 				Type: disk.FilesystemDataGUID,
 				UUID: disk.RootPartitionUUID,
-				Size: 5 * 1024 * 1024 * 1024, // previously without this line
+				//Size: 5 * 1024 * 1024 * 1024, // previously without this line
 				Payload: &disk.LUKSContainer{
 					Label:      "crypt_root",
 					Cipher:     "cipher_null",
@@ -220,7 +220,7 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 					Clevis: &disk.ClevisBind{
 						Pin:              "null",
 						Policy:           "{}",
-						RemovePassphrase: false,
+						RemovePassphrase: true,
 					},
 					Payload: &disk.LVMVolumeGroup{
 						Name:        "rootvg",
