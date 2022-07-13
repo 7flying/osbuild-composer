@@ -4,12 +4,13 @@ import (
 	"fmt"
 
 	"github.com/osbuild/osbuild-composer/internal/osbuild2"
+	"github.com/osbuild/osbuild-composer/internal/platform"
 	"github.com/osbuild/osbuild-composer/internal/rpmmd"
 )
 
-// An AnacondaPipeline represents the installer tree as found on an ISO.
-type AnacondaPipeline struct {
-	BasePipeline
+// An Anaconda represents the installer tree as found on an ISO.
+type Anaconda struct {
+	Base
 	// Packages to install in addition to the ones required by the
 	// pipeline.
 	ExtraPackages []string
@@ -29,35 +30,35 @@ type AnacondaPipeline struct {
 	// Variant is the variant of the product being installed, if applicable.
 	Variant string
 
+	platform     platform.Platform
 	repos        []rpmmd.RepoConfig
 	packageSpecs []rpmmd.PackageSpec
 	kernelName   string
 	kernelVer    string
-	arch         string
 	product      string
 	version      string
 }
 
-// NewAnacondaPipeline creates an anaconda pipeline object. repos and packages
+// NewAnaconda creates an anaconda pipeline object. repos and packages
 // indicate the content to build the installer from, which is distinct from the
 // packages the installer will install on the target system. kernelName is the
 // name of the kernel package the intsaller will use. arch is the supported
 // architecture. Product and version refers to the product the installer is the
 // installer for.
-func NewAnacondaPipeline(m *Manifest,
-	buildPipeline *BuildPipeline,
+func NewAnaconda(m *Manifest,
+	buildPipeline *Build,
+	platform platform.Platform,
 	repos []rpmmd.RepoConfig,
 	kernelName,
-	arch,
 	product,
-	version string) *AnacondaPipeline {
-	p := &AnacondaPipeline{
-		BasePipeline: NewBasePipeline(m, "anaconda-tree", buildPipeline, nil),
-		repos:        repos,
-		kernelName:   kernelName,
-		arch:         arch,
-		product:      product,
-		version:      version,
+	version string) *Anaconda {
+	p := &Anaconda{
+		Base:       NewBase(m, "anaconda-tree", buildPipeline),
+		platform:   platform,
+		repos:      repos,
+		kernelName: kernelName,
+		product:    product,
+		version:    version,
 	}
 	buildPipeline.addDependent(p)
 	m.addPipeline(p)
@@ -66,7 +67,7 @@ func NewAnacondaPipeline(m *Manifest,
 
 // TODO: refactor - what is required to boot and what to build, and
 // do they all belong in this pipeline?
-func (p *AnacondaPipeline) anacondaBootPackageSet() []string {
+func (p *Anaconda) anacondaBootPackageSet() []string {
 	packages := []string{
 		"grub2-tools",
 		"grub2-tools-extra",
@@ -74,9 +75,8 @@ func (p *AnacondaPipeline) anacondaBootPackageSet() []string {
 		"efibootmgr",
 	}
 
-	// TODO: use constants for architectures
-	switch p.arch {
-	case "x86_64":
+	switch p.platform.GetArch() {
+	case platform.ARCH_X86_64:
 		packages = append(packages,
 			"grub2-efi-x64",
 			"grub2-efi-x64-cdboot",
@@ -86,28 +86,29 @@ func (p *AnacondaPipeline) anacondaBootPackageSet() []string {
 			"syslinux",
 			"syslinux-nonlinux",
 		)
-	case "aarch64":
+	case platform.ARCH_AARCH64:
 		packages = append(packages,
 			"grub2-efi-aa64-cdboot",
 			"grub2-efi-aa64",
 			"shim-aa64",
 		)
 	default:
-		panic(fmt.Sprintf("unsupported arch: %s", p.arch))
+		panic(fmt.Sprintf("unsupported arch: %s", p.platform.GetArch()))
 	}
 
 	return packages
 }
 
-func (p *AnacondaPipeline) getBuildPackages() []string {
+func (p *Anaconda) getBuildPackages() []string {
 	packages := p.anacondaBootPackageSet()
 	packages = append(packages,
+		"rpm",
 		"lorax-templates-generic",
 	)
 	return packages
 }
 
-func (p *AnacondaPipeline) getPackageSetChain() []rpmmd.PackageSet {
+func (p *Anaconda) getPackageSetChain() []rpmmd.PackageSet {
 	packages := p.anacondaBootPackageSet()
 	return []rpmmd.PackageSet{
 		{
@@ -117,11 +118,11 @@ func (p *AnacondaPipeline) getPackageSetChain() []rpmmd.PackageSet {
 	}
 }
 
-func (p *AnacondaPipeline) getPackageSpecs() []rpmmd.PackageSpec {
+func (p *Anaconda) getPackageSpecs() []rpmmd.PackageSpec {
 	return p.packageSpecs
 }
 
-func (p *AnacondaPipeline) serializeStart(packages []rpmmd.PackageSpec) {
+func (p *Anaconda) serializeStart(packages []rpmmd.PackageSpec) {
 	if len(p.packageSpecs) > 0 {
 		panic("double call to serializeStart()")
 	}
@@ -131,7 +132,7 @@ func (p *AnacondaPipeline) serializeStart(packages []rpmmd.PackageSpec) {
 	}
 }
 
-func (p *AnacondaPipeline) serializeEnd() {
+func (p *Anaconda) serializeEnd() {
 	if len(p.packageSpecs) == 0 {
 		panic("serializeEnd() call when serialization not in progress")
 	}
@@ -139,15 +140,15 @@ func (p *AnacondaPipeline) serializeEnd() {
 	p.packageSpecs = nil
 }
 
-func (p *AnacondaPipeline) serialize() osbuild2.Pipeline {
+func (p *Anaconda) serialize() osbuild2.Pipeline {
 	if len(p.packageSpecs) == 0 {
 		panic("serialization not started")
 	}
-	pipeline := p.BasePipeline.serialize()
+	pipeline := p.Base.serialize()
 
 	pipeline.AddStage(osbuild2.NewRPMStage(osbuild2.NewRPMStageOptions(p.repos), osbuild2.NewRpmStageSourceFilesInputs(p.packageSpecs)))
 	pipeline.AddStage(osbuild2.NewBuildstampStage(&osbuild2.BuildstampStageOptions{
-		Arch:    p.arch,
+		Arch:    p.platform.GetArch().String(),
 		Product: p.product,
 		Variant: p.Variant,
 		Version: p.version,
@@ -183,7 +184,7 @@ func (p *AnacondaPipeline) serialize() osbuild2.Pipeline {
 	pipeline.AddStage(osbuild2.NewAnacondaStage(osbuild2.NewAnacondaStageOptions(p.Users)))
 	pipeline.AddStage(osbuild2.NewLoraxScriptStage(&osbuild2.LoraxScriptStageOptions{
 		Path:     "99-generic/runtime-postinstall.tmpl",
-		BaseArch: p.arch,
+		BaseArch: p.platform.GetArch().String(),
 	}))
 	pipeline.AddStage(osbuild2.NewDracutStage(dracutStageOptions(p.kernelVer, p.Biosdevname, []string{
 		"anaconda",
@@ -253,4 +254,8 @@ func dracutStageOptions(kernelVer string, biosdevname bool, additionalModules []
 		Modules: modules,
 		Install: []string{"/.buildstamp"},
 	}
+}
+
+func (p *Anaconda) GetPlatform() platform.Platform {
+	return p.platform
 }

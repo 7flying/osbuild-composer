@@ -4,45 +4,44 @@ import (
 	"github.com/osbuild/osbuild-composer/internal/osbuild2"
 )
 
-// An ISOPipeline represents a bootable ISO file created from an
+// An ISO represents a bootable ISO file created from an
 // an existing ISOTreePipeline.
-type ISOPipeline struct {
-	BasePipeline
+type ISO struct {
+	Base
 	ISOLinux bool
+	Filename string
 
-	treePipeline *ISOTreePipeline
-	filename     string
+	treePipeline *ISOTree
 }
 
-func NewISOPipeline(m *Manifest,
-	buildPipeline *BuildPipeline,
-	treePipeline *ISOTreePipeline,
-	filename string) *ISOPipeline {
-	p := &ISOPipeline{
-		BasePipeline: NewBasePipeline(m, "bootiso", buildPipeline, nil),
+func NewISO(m *Manifest,
+	buildPipeline *Build,
+	treePipeline *ISOTree) *ISO {
+	p := &ISO{
+		Base:         NewBase(m, "bootiso", buildPipeline),
 		treePipeline: treePipeline,
-		filename:     filename,
+		Filename:     "image.iso",
 	}
 	buildPipeline.addDependent(p)
-	if treePipeline.BasePipeline.manifest != m {
+	if treePipeline.Base.manifest != m {
 		panic("tree pipeline from different manifest")
 	}
 	m.addPipeline(p)
 	return p
 }
 
-func (p *ISOPipeline) getBuildPackages() []string {
+func (p *ISO) getBuildPackages() []string {
 	return []string{
 		"isomd5sum",
 		"xorriso",
 	}
 }
 
-func (p *ISOPipeline) serialize() osbuild2.Pipeline {
-	pipeline := p.BasePipeline.serialize()
+func (p *ISO) serialize() osbuild2.Pipeline {
+	pipeline := p.Base.serialize()
 
-	pipeline.AddStage(osbuild2.NewXorrisofsStage(xorrisofsStageOptions(p.filename, p.treePipeline.isoLabel, p.ISOLinux), osbuild2.NewXorrisofsStagePipelineTreeInputs(p.treePipeline.Name())))
-	pipeline.AddStage(osbuild2.NewImplantisomd5Stage(&osbuild2.Implantisomd5StageOptions{Filename: p.filename}))
+	pipeline.AddStage(osbuild2.NewXorrisofsStage(xorrisofsStageOptions(p.Filename, p.treePipeline.isoLabel, p.ISOLinux), osbuild2.NewXorrisofsStagePipelineTreeInputs(p.treePipeline.Name())))
+	pipeline.AddStage(osbuild2.NewImplantisomd5Stage(&osbuild2.Implantisomd5StageOptions{Filename: p.Filename}))
 
 	return pipeline
 }

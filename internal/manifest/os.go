@@ -15,19 +15,19 @@ import (
 	"github.com/osbuild/osbuild-composer/internal/workload"
 )
 
-type OSPipelineOSTree struct {
-	Parent *OSPipelineOSTreeParent
+type OSTree struct {
+	Parent *OSTreeParent
 }
 
-type OSPipelineOSTreeParent struct {
+type OSTreeParent struct {
 	Checksum string
 	URL      string
 }
 
-// OSPipeline represents the filesystem tree of the target image. This roughly
+// OS represents the filesystem tree of the target image. This roughly
 // correpsonds to the root filesystem once an instance of the image is running.
-type OSPipeline struct {
-	BasePipeline
+type OS struct {
+	Base
 	// Packages to install in addition to the ones required by the
 	// pipeline.
 	ExtraBasePackages []string
@@ -43,7 +43,7 @@ type OSPipeline struct {
 	// Workload to install on top of the base system
 	Workload workload.Workload
 	// OSTree configuration, if nil the tree cannot be in an OSTree commit
-	OSTree *OSPipelineOSTree
+	OSTree *OSTree
 	// Partition table, if nil the tree cannot be put on a partioned disk
 	PartitionTable *disk.PartitionTable
 	// KernelName indicates that a kernel is installed, and names the kernel
@@ -99,31 +99,31 @@ type OSPipeline struct {
 	kernelVer    string
 }
 
-// NewOSPipeline creates a new OS pipeline. osTree indicates whether or not the
+// NewOS creates a new OS pipeline. osTree indicates whether or not the
 // system is ostree based. osTreeParent indicates (for ostree systems) what the
 // parent commit is. repos are the reposotories to install RPMs from. packages
 // are the depsolved pacakges to be installed into the tree. partitionTable
 // represents the disk layout of the target system. kernelName is the name of the
 // kernel package that will be used on the target system.
-func NewOSPipeline(m *Manifest,
-	buildPipeline *BuildPipeline,
+func NewOS(m *Manifest,
+	buildPipeline *Build,
 	platform platform.Platform,
-	repos []rpmmd.RepoConfig) *OSPipeline {
-	p := &OSPipeline{
-		BasePipeline: NewBasePipeline(m, "os", buildPipeline, nil),
-		repos:        repos,
-		platform:     platform,
-		Language:     "C.UTF-8",
-		Hostname:     "localhost.localdomain",
-		Timezone:     "UTC",
-		SElinux:      "targeted",
+	repos []rpmmd.RepoConfig) *OS {
+	p := &OS{
+		Base:     NewBase(m, "os", buildPipeline),
+		repos:    repos,
+		platform: platform,
+		Language: "C.UTF-8",
+		Hostname: "localhost.localdomain",
+		Timezone: "UTC",
+		SElinux:  "targeted",
 	}
 	buildPipeline.addDependent(p)
 	m.addPipeline(p)
 	return p
 }
 
-func (p *OSPipeline) getPackageSetChain() []rpmmd.PackageSet {
+func (p *OS) getPackageSetChain() []rpmmd.PackageSet {
 	packages := p.platform.GetPackages()
 
 	if p.KernelName != "" {
@@ -132,50 +132,7 @@ func (p *OSPipeline) getPackageSetChain() []rpmmd.PackageSet {
 
 	// If we have a logical volume we need to include the lvm2 package
 	if p.PartitionTable != nil && p.OSTree == nil {
-		hasLVM := false
-		hasBtrfs := false
-		hasXFS := false
-		hasFAT := false
-		hasEXT4 := false
-
-		introspectPT := func(e disk.Entity, path []disk.Entity) error {
-			switch ent := e.(type) {
-			case *disk.LVMLogicalVolume:
-				hasLVM = true
-			case *disk.Btrfs:
-				hasBtrfs = true
-			case *disk.Filesystem:
-				switch ent.GetFSType() {
-				case "vfat":
-					hasFAT = true
-				case "btrfs":
-					hasBtrfs = true
-				case "xfs":
-					hasXFS = true
-				case "ext4":
-					hasEXT4 = true
-				}
-			}
-			return nil
-		}
-		_ = p.PartitionTable.ForEachEntity(introspectPT)
-
-		// TODO: LUKS
-		if hasLVM {
-			packages = append(packages, "lvm2")
-		}
-		if hasBtrfs {
-			packages = append(packages, "btrfs-progs")
-		}
-		if hasXFS {
-			packages = append(packages, "xfsprogs")
-		}
-		if hasFAT {
-			packages = append(packages, "dosfstools")
-		}
-		if hasEXT4 {
-			packages = append(packages, "e2fsprogs")
-		}
+		packages = append(packages, p.PartitionTable.GetBuildPackages()...)
 	}
 
 	if p.Environment != nil {
@@ -208,15 +165,20 @@ func (p *OSPipeline) getPackageSetChain() []rpmmd.PackageSet {
 	return chain
 }
 
-func (p *OSPipeline) getBuildPackages() []string {
+func (p *OS) getBuildPackages() []string {
 	packages := p.platform.GetBuildPackages()
+	packages = append(packages, "rpm")
 	if p.OSTree != nil {
 		packages = append(packages, "rpm-ostree")
+	}
+	if p.SElinux != "" {
+		packages = append(packages, "policycoreutils")
+		packages = append(packages, fmt.Sprintf("selinux-policy-%s", p.SElinux))
 	}
 	return packages
 }
 
-func (p *OSPipeline) getOSTreeCommits() []osTreeCommit {
+func (p *OS) getOSTreeCommits() []osTreeCommit {
 	commits := []osTreeCommit{}
 	if p.OSTree != nil && p.OSTree.Parent != nil {
 		commits = append(commits, osTreeCommit{
@@ -227,11 +189,11 @@ func (p *OSPipeline) getOSTreeCommits() []osTreeCommit {
 	return commits
 }
 
-func (p *OSPipeline) getPackageSpecs() []rpmmd.PackageSpec {
+func (p *OS) getPackageSpecs() []rpmmd.PackageSpec {
 	return p.packageSpecs
 }
 
-func (p *OSPipeline) serializeStart(packages []rpmmd.PackageSpec) {
+func (p *OS) serializeStart(packages []rpmmd.PackageSpec) {
 	if len(p.packageSpecs) > 0 {
 		panic("double call to serializeStart()")
 	}
@@ -241,7 +203,7 @@ func (p *OSPipeline) serializeStart(packages []rpmmd.PackageSpec) {
 	}
 }
 
-func (p *OSPipeline) serializeEnd() {
+func (p *OS) serializeEnd() {
 	if len(p.packageSpecs) == 0 {
 		panic("serializeEnd() call when serialization not in progress")
 	}
@@ -249,12 +211,12 @@ func (p *OSPipeline) serializeEnd() {
 	p.packageSpecs = nil
 }
 
-func (p *OSPipeline) serialize() osbuild2.Pipeline {
+func (p *OS) serialize() osbuild2.Pipeline {
 	if len(p.packageSpecs) == 0 {
 		panic("serialization not started")
 	}
 
-	pipeline := p.BasePipeline.serialize()
+	pipeline := p.Base.serialize()
 
 	if p.OSTree != nil && p.OSTree.Parent != nil {
 		pipeline.AddStage(osbuild2.NewOSTreePasswdStage("org.osbuild.source", p.OSTree.Parent.Checksum))
@@ -508,4 +470,8 @@ func usersFirstBootOptions(usersStageOptions *osbuild2.UsersStageOptions) *osbui
 	}
 
 	return options
+}
+
+func (p *OS) GetPlatform() platform.Platform {
+	return p.platform
 }

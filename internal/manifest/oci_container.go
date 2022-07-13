@@ -4,30 +4,26 @@ import (
 	"github.com/osbuild/osbuild-composer/internal/osbuild2"
 )
 
-// An OCIContainerPipeline represents an OCI container, containing a filesystem
+// An OCIContainer represents an OCI container, containing a filesystem
 // tree created by another Pipeline.
-type OCIContainerPipeline struct {
-	BasePipeline
+type OCIContainer struct {
+	Base
+	Filename     string
 	Cmd          []string
 	ExposedPorts []string
 
-	treePipeline *BasePipeline
-	architecture string
-	filename     string
+	treePipeline Tree
 }
 
-func NewOCIContainerPipeline(m *Manifest,
-	buildPipeline *BuildPipeline,
-	treePipeline *BasePipeline,
-	architecture,
-	filename string) *OCIContainerPipeline {
-	p := &OCIContainerPipeline{
-		BasePipeline: NewBasePipeline(m, "container", buildPipeline, nil),
+func NewOCIContainer(m *Manifest,
+	buildPipeline *Build,
+	treePipeline Tree) *OCIContainer {
+	p := &OCIContainer{
+		Base:         NewBase(m, "container", buildPipeline),
 		treePipeline: treePipeline,
-		architecture: architecture,
-		filename:     filename,
+		Filename:     "oci-archive.tar",
 	}
-	if treePipeline.build.BasePipeline.manifest != m {
+	if treePipeline.GetManifest() != m {
 		panic("tree pipeline from different manifest")
 	}
 	buildPipeline.addDependent(p)
@@ -35,12 +31,12 @@ func NewOCIContainerPipeline(m *Manifest,
 	return p
 }
 
-func (p *OCIContainerPipeline) serialize() osbuild2.Pipeline {
-	pipeline := p.BasePipeline.serialize()
+func (p *OCIContainer) serialize() osbuild2.Pipeline {
+	pipeline := p.Base.serialize()
 
 	options := &osbuild2.OCIArchiveStageOptions{
-		Architecture: p.architecture,
-		Filename:     p.filename,
+		Architecture: p.treePipeline.GetPlatform().GetArch().String(),
+		Filename:     p.Filename,
 		Config: &osbuild2.OCIArchiveConfig{
 			Cmd:          p.Cmd,
 			ExposedPorts: p.ExposedPorts,
@@ -54,4 +50,8 @@ func (p *OCIContainerPipeline) serialize() osbuild2.Pipeline {
 	pipeline.AddStage(osbuild2.NewOCIArchiveStage(options, inputs))
 
 	return pipeline
+}
+
+func (p *OCIContainer) getBuildPackages() []string {
+	return []string{"tar"}
 }
