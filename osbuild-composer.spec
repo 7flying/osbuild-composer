@@ -184,7 +184,7 @@ install -m 0755 -vd                                                %{buildroot}%
 install -m 0755 -vd                                                %{buildroot}%{_mandir}/man7
 install -m 0644 -vp docs/*.7                                       %{buildroot}%{_mandir}/man7/
 
-%if %{with tests} || 0%{?rhel}
+#%if %{with tests} || 0%{?rhel}
 
 # install -m 0755 -vd                                                %{buildroot}%{_libexecdir}/osbuild-composer-test
 # install -m 0755 -vp _bin/osbuild-composer-cli-tests                %{buildroot}%{_libexecdir}/osbuild-composer-test/
@@ -263,7 +263,7 @@ install -m 0644 -vp docs/*.7                                       %{buildroot}%
 # install -m 0755 -vd                                               %{buildroot}%{_datadir}/tests/osbuild-composer/upgrade8to9
 # install -m 0644 -vp test/data/upgrade8to9/*                       %{buildroot}%{_datadir}/tests/osbuild-composer/upgrade8to9/
 
-%endif
+#%endif
 
 %check
 export GOFLAGS="-buildmode=pie"
