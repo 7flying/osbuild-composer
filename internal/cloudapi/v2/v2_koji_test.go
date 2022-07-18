@@ -15,8 +15,7 @@ import (
 	v2 "github.com/osbuild/osbuild-composer/internal/cloudapi/v2"
 	"github.com/osbuild/osbuild-composer/internal/distro/test_distro"
 	"github.com/osbuild/osbuild-composer/internal/kojiapi/api"
-	"github.com/osbuild/osbuild-composer/internal/osbuild2"
-	osbuild "github.com/osbuild/osbuild-composer/internal/osbuild2"
+	"github.com/osbuild/osbuild-composer/internal/osbuild"
 	"github.com/osbuild/osbuild-composer/internal/target"
 	"github.com/osbuild/osbuild-composer/internal/test"
 	"github.com/osbuild/osbuild-composer/internal/worker"
@@ -533,7 +532,7 @@ func TestKojiCompose(t *testing.T) {
 			test.TestRoute(t, handler, false, "GET", fmt.Sprintf("/api/image-builder-composer/v2/composes/%v", finalizeID), ``, http.StatusOK, c.composeStatus, `href`, `id`)
 
 			// get the manifests
-			test.TestRoute(t, handler, false, "GET", fmt.Sprintf("/api/image-builder-composer/v2/composes/%v/manifests", finalizeID), ``, http.StatusOK, `{"manifests":[{"pipeline":{},"sources":{}},{"pipeline":{},"sources":{}}],"kind":"ComposeManifests"}`, `href`, `id`)
+			test.TestRoute(t, handler, false, "GET", fmt.Sprintf("/api/image-builder-composer/v2/composes/%v/manifests", finalizeID), ``, http.StatusOK, `{"manifests":[{"version":"","pipelines":[],"sources":{}},{"version":"","pipelines":[],"sources":{}}],"kind":"ComposeManifests"}`, `href`, `id`)
 
 			// get the logs
 			test.TestRoute(t, handler, false, "GET", fmt.Sprintf("/api/image-builder-composer/v2/composes/%v/logs", finalizeID), ``, http.StatusOK, `{"kind":"ComposeLogs"}`, `koji`, `image_builds`, `href`, `id`)
@@ -589,7 +588,7 @@ func TestKojiJobTypeValidation(t *testing.T) {
 	initID, err := workers.EnqueueKojiInit(&initJob, "")
 	require.NoError(t, err)
 
-	manifest, err := json.Marshal(osbuild2.Manifest{})
+	manifest, err := json.Marshal(osbuild.Manifest{})
 	require.NoErrorf(t, err, "error marshalling empty Manifest to JSON")
 
 	buildJobs := make([]worker.OSBuildJob, nImages)
