@@ -8,10 +8,11 @@ stages:
 
 .base:
   before_script:
-    - schutzbot/ci_details.sh > ci-details-before-run.txt
+    - mkdir -p /tmp/artifacts
+    - schutzbot/ci_details.sh > /tmp/artifacts/ci-details-before-run.txt
     - cat schutzbot/team_ssh_keys.txt | tee -a ~/.ssh/authorized_keys > /dev/null
   after_script:
-    - schutzbot/ci_details.sh > ci-details-after-run.txt || true
+    - schutzbot/ci_details.sh > /tmp/artifacts/ci-details-after-run.txt || true
     - schutzbot/update_github_status.sh update || true
     - schutzbot/save_journal.sh || true
     - schutzbot/upload_artifacts.sh
@@ -166,6 +167,8 @@ Base:
       - RUNNER:
           - aws/fedora-35-x86_64
           - aws/fedora-35-aarch64
+          - aws/fedora-36-x86_64
+          - aws/fedora-36-aarch64
           - aws/rhel-8.4-ga-x86_64
           - aws/rhel-8.4-ga-aarch64
           - aws/rhel-8.6-ga-x86_64
@@ -212,6 +215,8 @@ Manifests:
       - RUNNER:
           - aws/fedora-35-x86_64
           - aws/fedora-35-aarch64
+          - aws/fedora-36-x86_64
+          - aws/fedora-36-aarch64
           - aws/centos-stream-8-x86_64
           - aws/centos-stream-8-aarch64
       - RUNNER:
@@ -312,6 +317,7 @@ OSTree:
     matrix:
       - RUNNER:
           - rhos-01/fedora-35-x86_64
+          # - rhos-01/fedora-36-x86_64
           - rhos-01/rhel-8.4-ga-x86_64
           - rhos-01/rhel-8.6-ga-x86_64
           - rhos-01/rhel-9.0-ga-x86_64
@@ -330,6 +336,7 @@ New OSTree:
     matrix:
       - RUNNER:
           - rhos-01/fedora-35-x86_64-large
+          # - rhos-01/fedora-36-x86_64-large
           - rhos-01/rhel-8.7-nightly-x86_64-large
           - rhos-01/rhel-9.1-nightly-x86_64-large
           - rhos-01/centos-stream-8-x86_64-large
@@ -413,6 +420,7 @@ Rebase OSTree:
 .fedora_runners: &fedora_runners
     RUNNER:
       - aws/fedora-35-x86_64
+      - aws/fedora-36-x86_64
 
 .integration_fedora:
   extends: .integration_base
@@ -430,13 +438,6 @@ Rebase OSTree:
 koji.sh (cloudapi):
   extends: .integration
   variables:
-    SCRIPT: koji.sh
-
-# internal composer still uses kojiapi, so keep testing it for now
-koji.sh (kojiapi):
-  extends: .integration
-  variables:
-    COMPOSER_API: "false"
     SCRIPT: koji.sh
 
 aws.sh:
@@ -501,6 +502,7 @@ API:
       - IMAGE_TYPE: ["edge-commit"]
         RUNNER:
           - aws/fedora-35-x86_64
+          - aws/fedora-36-x86_64
 
 .libvirt_integration:
   stage: test
@@ -669,6 +671,21 @@ ContainerUpload:
   variables:
     RUNNER: aws/fedora-35-x86_64
     INTERNAL_NETWORK: "false"
+
+ContainerEmbedding:
+  stage: test
+  extends: .terraform
+  rules:
+    - !reference [.upstream_rules, rules]
+  script:
+    - schutzbot/deploy.sh
+    - /usr/libexec/tests/osbuild-composer/container-embedding.sh
+  parallel:
+    matrix:
+      - INTERNAL_NETWORK: "true"
+        RUNNER:
+        - aws/centos-stream-8-x86_64
+        - aws/centos-stream-9-x86_64
 
 finish:
   stage: finish

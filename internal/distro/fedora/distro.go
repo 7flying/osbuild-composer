@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/osbuild/osbuild-composer/internal/blueprint"
+	"github.com/osbuild/osbuild-composer/internal/container"
 	"github.com/osbuild/osbuild-composer/internal/disk"
 	"github.com/osbuild/osbuild-composer/internal/distro"
 	"github.com/osbuild/osbuild-composer/internal/environment"
@@ -35,7 +36,6 @@ const (
 	blueprintPkgsKey = "blueprint"
 
 	// Fedora distribution
-	fedora34Distribution = "fedora-34"
 	fedora35Distribution = "fedora-35"
 	fedora36Distribution = "fedora-36"
 
@@ -303,18 +303,6 @@ var defaultDistroImageConfig = &distro.ImageConfig{
 
 // distribution objects without the arches > image types
 var distroMap = map[string]distribution{
-	fedora34Distribution: {
-		name:               fedora34Distribution,
-		product:            "Fedora",
-		osVersion:          "34",
-		releaseVersion:     "34",
-		modulePlatformID:   "platform:f34",
-		vendor:             "fedora",
-		ostreeRefTmpl:      "fedora/34/%s/iot",
-		isolabelTmpl:       "Fedora-34-BaseOS-%s",
-		runner:             &runner.Fedora{Version: 34},
-		defaultImageConfig: defaultDistroImageConfig,
-	},
 	fedora35Distribution: {
 		name:               fedora35Distribution,
 		product:            "Fedora",
@@ -545,7 +533,7 @@ func (t *imageType) PackageSets(bp blueprint.Blueprint, options distro.ImageOpti
 	}
 
 	// create a manifest object and instantiate it with the computed packageSetChains
-	manifest, err := t.initializeManifest(&bp, options, globalRepos, packageSets, 0)
+	manifest, err := t.initializeManifest(&bp, options, globalRepos, packageSets, nil, 0)
 	if err != nil {
 		// TODO: handle manifest initialization errors more gracefully, we
 		// refuse to initialize manifests with invalid config.
@@ -618,9 +606,10 @@ func (t *imageType) initializeManifest(bp *blueprint.Blueprint,
 	options distro.ImageOptions,
 	repos []rpmmd.RepoConfig,
 	packageSets map[string]rpmmd.PackageSet,
+	containers []container.Spec,
 	seed int64) (*manifest.Manifest, error) {
 
-	if err := t.checkOptions(bp.Customizations, options); err != nil {
+	if err := t.checkOptions(bp.Customizations, options, containers); err != nil {
 		return nil, err
 	}
 
@@ -655,6 +644,7 @@ func (t *imageType) Manifest(customizations *blueprint.Customizations,
 	options distro.ImageOptions,
 	repos []rpmmd.RepoConfig,
 	packageSets map[string][]rpmmd.PackageSpec,
+	containers []container.Spec,
 	seed int64) (distro.Manifest, error) {
 
 	bp := &blueprint.Blueprint{}
@@ -664,7 +654,7 @@ func (t *imageType) Manifest(customizations *blueprint.Customizations,
 	}
 	bp.Customizations = customizations
 
-	manifest, err := t.initializeManifest(bp, options, repos, nil, seed)
+	manifest, err := t.initializeManifest(bp, options, repos, nil, containers, seed)
 	if err != nil {
 		return distro.Manifest{}, err
 	}
@@ -673,7 +663,12 @@ func (t *imageType) Manifest(customizations *blueprint.Customizations,
 }
 
 // checkOptions checks the validity and compatibility of options and customizations for the image type.
-func (t *imageType) checkOptions(customizations *blueprint.Customizations, options distro.ImageOptions) error {
+func (t *imageType) checkOptions(customizations *blueprint.Customizations, options distro.ImageOptions, containers []container.Spec) error {
+
+	if len(containers) > 0 {
+		return fmt.Errorf("embedding containers is not supported for %s on %s", t.name, t.arch.distro.name)
+	}
+
 	if t.bootISO && t.rpmOstree {
 		if options.OSTree.Parent == "" {
 			return fmt.Errorf("boot ISO image type %q requires specifying a URL from which to retrieve the OSTree commit", t.name)
@@ -716,9 +711,6 @@ func NewHostDistro(name, modulePlatformID, ostreeRef string) distro.Distro {
 }
 
 // New creates a new distro object, defining the supported architectures and image types
-func NewF34() distro.Distro {
-	return newDistro(fedora34Distribution)
-}
 func NewF35() distro.Distro {
 	return newDistro(fedora35Distribution)
 }

@@ -67,9 +67,6 @@ Conflicts: lorax-composer
 Obsoletes: lorax-composer < 34.3
 %endif
 
-# remove when F34 is EOL
-Obsoletes: osbuild-composer-koji <= 23
-
 %description
 %{common_description}
 
@@ -204,7 +201,6 @@ install -m 0644 -vp docs/*.7                                       %{buildroot}%
 # install -m 0755 -vp tools/image-info                               %{buildroot}%{_libexecdir}/osbuild-composer-test/
 # install -m 0755 -vp tools/run-koji-container.sh                    %{buildroot}%{_libexecdir}/osbuild-composer-test/
 # install -m 0755 -vp tools/koji-compose.py                          %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp tools/koji-compose-v2.py                       %{buildroot}%{_libexecdir}/osbuild-composer-test/
 # install -m 0755 -vp tools/libvirt_test.sh                          %{buildroot}%{_libexecdir}/osbuild-composer-test/
 # install -m 0755 -vp tools/s3_test.sh                               %{buildroot}%{_libexecdir}/osbuild-composer-test/
 # install -m 0755 -vp tools/generic_s3_test.sh                       %{buildroot}%{_libexecdir}/osbuild-composer-test/
@@ -213,6 +209,55 @@ install -m 0644 -vp docs/*.7                                       %{buildroot}%
 # install -m 0755 -vp tools/test-case-generators/generate-test-cases %{buildroot}%{_libexecdir}/osbuild-composer-test/
 # install -m 0755 -vd                                                %{buildroot}%{_libexecdir}/tests/osbuild-composer
 # install -m 0755 -vp test/cases/*.sh                                %{buildroot}%{_libexecdir}/tests/osbuild-composer/
+
+# install -m 0755 -vd                                                %{buildroot}%{_libexecdir}/tests/osbuild-composer/api
+# install -m 0755 -vp test/cases/api/*.sh                            %{buildroot}%{_libexecdir}/tests/osbuild-composer/api/
+
+# install -m 0755 -vd                                                %{buildroot}%{_libexecdir}/tests/osbuild-composer/api/common
+# install -m 0755 -vp test/cases/api/common/*.sh                     %{buildroot}%{_libexecdir}/tests/osbuild-composer/api/common/
+
+# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/ansible
+# install -m 0644 -vp test/data/ansible/*                            %{buildroot}%{_datadir}/tests/osbuild-composer/ansible/
+
+# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/azure
+# install -m 0644 -vp test/data/azure/*                              %{buildroot}%{_datadir}/tests/osbuild-composer/azure/
+
+# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/manifests
+# install -m 0644 -vp test/data/manifests/*                          %{buildroot}%{_datadir}/tests/osbuild-composer/manifests/
+
+# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/cloud-init
+# install -m 0644 -vp test/data/cloud-init/*                         %{buildroot}%{_datadir}/tests/osbuild-composer/cloud-init/
+
+# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/composer
+# install -m 0644 -vp test/data/composer/*                           %{buildroot}%{_datadir}/tests/osbuild-composer/composer/
+
+# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/worker
+# install -m 0644 -vp test/data/worker/*                             %{buildroot}%{_datadir}/tests/osbuild-composer/worker/
+
+# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/repositories
+# install -m 0644 -vp test/data/repositories/*                       %{buildroot}%{_datadir}/tests/osbuild-composer/repositories/
+
+# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/kerberos
+# install -m 0644 -vp test/data/kerberos/*                           %{buildroot}%{_datadir}/tests/osbuild-composer/kerberos/
+
+# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/keyring
+# install -m 0644 -vp test/data/keyring/id_rsa.pub                   %{buildroot}%{_datadir}/tests/osbuild-composer/keyring/
+# install -m 0600 -vp test/data/keyring/id_rsa                       %{buildroot}%{_datadir}/tests/osbuild-composer/keyring/
+
+# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/koji
+# install -m 0644 -vp test/data/koji/*                               %{buildroot}%{_datadir}/tests/osbuild-composer/koji/
+
+# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/x509
+# install -m 0644 -vp test/data/x509/*                               %{buildroot}%{_datadir}/tests/osbuild-composer/x509/
+
+# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/openshift
+# install -m 0644 -vp test/data/openshift/*                          %{buildroot}%{_datadir}/tests/osbuild-composer/openshift/
+
+# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/schemas
+# install -m 0644 -vp pkg/jobqueue/dbjobqueue/schemas/*              %{buildroot}%{_datadir}/tests/osbuild-composer/schemas/
+
+# install -m 0755 -vd                                               %{buildroot}%{_datadir}/tests/osbuild-composer/upgrade8to9
+# install -m 0644 -vp test/data/upgrade8to9/*                       %{buildroot}%{_datadir}/tests/osbuild-composer/upgrade8to9/
 
 # install -m 0755 -vd                                                %{buildroot}%{_libexecdir}/tests/osbuild-composer/api
 # install -m 0755 -vp test/cases/api/*.sh                            %{buildroot}%{_libexecdir}/tests/osbuild-composer/api/
@@ -318,10 +363,6 @@ Requires:   osbuild-ostree >= 55
 Requires:   osbuild-lvm2 >= 55
 Requires:   osbuild-luks2 >= 55
 Requires:   %{name}-dnf-json = %{version}-%{release}
-
-# remove in F34
-Obsoletes: golang-github-osbuild-composer-worker < %{version}-%{release}
-Provides:  golang-github-osbuild-composer-worker = %{version}-%{release}
 
 %description worker
 The worker for osbuild-composer

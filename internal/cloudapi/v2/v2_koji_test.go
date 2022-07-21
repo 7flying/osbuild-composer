@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -14,7 +13,6 @@ import (
 
 	v2 "github.com/osbuild/osbuild-composer/internal/cloudapi/v2"
 	"github.com/osbuild/osbuild-composer/internal/distro/test_distro"
-	"github.com/osbuild/osbuild-composer/internal/kojiapi/api"
 	"github.com/osbuild/osbuild-composer/internal/osbuild"
 	"github.com/osbuild/osbuild-composer/internal/target"
 	"github.com/osbuild/osbuild-composer/internal/test"
@@ -540,35 +538,6 @@ func TestKojiCompose(t *testing.T) {
 	}
 }
 
-func TestKojiRequest(t *testing.T) {
-	server, _, _, cancel := newV2Server(t, t.TempDir(), []string{""}, false)
-	handler := server.Handler("/api/image-builder-composer/v2")
-	defer cancel()
-
-	// Make request to an invalid route
-	req := httptest.NewRequest("GET", "/invalidroute", nil)
-
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	resp := rec.Result()
-
-	var status api.Status
-	err := json.NewDecoder(resp.Body).Decode(&status)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusNotFound, resp.StatusCode)
-
-	// Trigger an error 400 code
-	req = httptest.NewRequest("GET", "/api/image-builder-composer/v2/composes/badid", nil)
-
-	rec = httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	resp = rec.Result()
-
-	err = json.NewDecoder(resp.Body).Decode(&status)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-}
-
 func TestKojiJobTypeValidation(t *testing.T) {
 	server, workers, _, cancel := newV2Server(t, t.TempDir(), []string{""}, false)
 	handler := server.Handler("/api/image-builder-composer/v2")
@@ -635,7 +604,7 @@ func TestKojiJobTypeValidation(t *testing.T) {
 
 	t.Logf("%q job ID: %s", worker.JobTypeKojiInit, initID)
 	t.Logf("%q job ID: %s", worker.JobTypeKojiFinalize, finalizeID)
-	t.Logf("%q job IDs: %v", worker.JobTypeOSBuildKoji, buildJobIDs)
+	t.Logf("%q job IDs: %v", worker.JobTypeOSBuild, buildJobIDs)
 	for _, path := range []string{"", "/manifests", "/logs"} {
 		// should return OK - actual result should be tested elsewhere
 		test.TestRoute(t, handler, false, "GET", fmt.Sprintf("/api/image-builder-composer/v2/composes/%s%s", finalizeID, path), ``, http.StatusOK, "*")
