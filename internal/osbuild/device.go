@@ -122,6 +122,10 @@ func GenDeviceFinishStages(pt *disk.PartitionTable, filename string) []*Stage {
 					}, stageDevices))
 				}
 			}
+			logrus.Print("printing stages: ")
+			for i, v := range stages {
+				logrus.Print("%d %+v", i, v)
+			}
 		case *disk.LVMVolumeGroup:
 			logrus.Print("GenDeviceFinishStages - LVMVolumeGroup")
 			// do not include us when getting the devices
@@ -140,6 +144,10 @@ func GenDeviceFinishStages(pt *disk.PartitionTable, filename string) []*Stage {
 				}, stageDevices)
 
 			stages = append(stages, stage)
+			logrus.Print("printing stages: ")
+			for i, v := range stages {
+				logrus.Print("%d %+v", i, v)
+			}
 		}
 
 		return nil
