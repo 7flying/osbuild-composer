@@ -207,7 +207,6 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 			{
 				Type: disk.FilesystemDataGUID,
 				UUID: disk.RootPartitionUUID,
-				//Size: 5 * 1024 * 1024 * 1024, // previously without this line
 				Payload: &disk.LUKSContainer{
 					Label:      "crypt_root",
 					Cipher:     "cipher_null",
@@ -220,37 +219,33 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 					Clevis: &disk.ClevisBind{
 						Pin:              "null",
 						Policy:           "{}",
-						RemovePassphrase: false,
+						RemovePassphrase: true,
 					},
-					Payload: &disk.LVMVolumeGroup{
-						Name:        "rootvg",
-						Description: "built with lvm2 and osbuild",
-						LogicalVolumes: []disk.LVMLogicalVolume{
-							{
-								Size: 2 * 1024 * 1024 * 1024, // GB
-								Name: "rootlv",
-								Payload: &disk.Filesystem{
-									Type:         "xfs",
-									Label:        "root",
-									Mountpoint:   "/",
-									FSTabOptions: "defaults",
-									FSTabFreq:    0,
-									FSTabPassNo:  0,
-								},
-							},
-							// {
-							// 	Size: 2 * 1024 * 1024 * 1024, // 2GB
-							// 	Name: "homelv",
-							// 	Payload: &disk.Filesystem{
-							// 		Type:         "xfs",
-							// 		Label:        "root",
-							// 		Mountpoint:   "/home",
-							// 		FSTabOptions: "defaults",
-							// 		FSTabFreq:    0,
-							// 		FSTabPassNo:  0,
-							// 	},
-							// },
-						},
+					// Payload: &disk.LVMVolumeGroup{
+					// 	Name:        "rootvg",
+					// 	Description: "built with lvm2 and osbuild",
+					// 	LogicalVolumes: []disk.LVMLogicalVolume{
+					// 		{
+					// 			Size: 2 * 1024 * 1024 * 1024, // GB
+					// 			Name: "rootlv",
+					// 			Payload: &disk.Filesystem{
+					// 				Type:         "xfs",
+					// 				Label:        "root",
+					// 				Mountpoint:   "/",
+					// 				FSTabOptions: "defaults",
+					// 				FSTabFreq:    0,
+					// 				FSTabPassNo:  0,
+					// 			},
+					// 		},
+					// 	},
+					// },
+					Payload: &disk.Filesystem{
+						Type:         "xfs",
+						Label:        "root",
+						Mountpoint:   "/",
+						FSTabOptions: "defaults",
+						FSTabFreq:    0,
+						FSTabPassNo:  0,
 					},
 				},
 			},
