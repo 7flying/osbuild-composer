@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/osbuild/osbuild-composer/internal/disk"
+	"github.com/sirupsen/logrus"
 )
 
 type Devices map[string]Device
@@ -26,6 +27,7 @@ func GenDeviceCreationStages(pt *disk.PartitionTable, filename string) []*Stage 
 
 		switch ent := e.(type) {
 		case *disk.LUKSContainer:
+			logrus.Print("GenDeviceCreationStages - LUKSContainer")
 			// do not include us when getting the devices
 			stageDevices, lastName := getDevices(path[:len(path)-1], filename, true)
 
@@ -34,7 +36,7 @@ func GenDeviceCreationStages(pt *disk.PartitionTable, filename string) []*Stage 
 			lastDevice := stageDevices[lastName]
 			delete(stageDevices, lastName)
 			stageDevices["device"] = lastDevice
-
+			logrus.Print("last device: %v", lastDevice)
 			stage := NewLUKS2CreateStage(
 				&LUKS2CreateStageOptions{
 					UUID:       ent.UUID,
@@ -63,12 +65,14 @@ func GenDeviceCreationStages(pt *disk.PartitionTable, filename string) []*Stage 
 			}
 
 		case *disk.LVMVolumeGroup:
+			logrus.Print("GenDeviceCreationStages - LVMVolumeGroup")
 			// do not include us when getting the devices
 			stageDevices, lastName := getDevices(path[:len(path)-1], filename, true)
 
 			// "org.osbuild.lvm2.create" expects a "device" to create the VG on,
 			// thus rename the last device to "device"
 			lastDevice := stageDevices[lastName]
+			logrus.Print("last device: %v", lastDevice)
 			delete(stageDevices, lastName)
 			stageDevices["device"] = lastDevice
 
@@ -102,10 +106,12 @@ func GenDeviceFinishStages(pt *disk.PartitionTable, filename string) []*Stage {
 
 		switch ent := e.(type) {
 		case *disk.LUKSContainer:
+			logrus.Print("GenDeviceFinishStages - LUKSContainer")
 			// do not include us when getting the devices
 			stageDevices, lastName := getDevices(path[:len(path)-1], filename, true)
 
 			lastDevice := stageDevices[lastName]
+			logrus.Print("dast device: %v", lastDevice)
 			delete(stageDevices, lastName)
 			stageDevices["device"] = lastDevice
 
@@ -117,12 +123,14 @@ func GenDeviceFinishStages(pt *disk.PartitionTable, filename string) []*Stage {
 				}
 			}
 		case *disk.LVMVolumeGroup:
+			logrus.Print("GenDeviceFinishStages - LVMVolumeGroup")
 			// do not include us when getting the devices
 			stageDevices, lastName := getDevices(path[:len(path)-1], filename, true)
 
 			// "org.osbuild.lvm2.metadata" expects a "device" to rename the VG,
 			// thus rename the last device to "device"
 			lastDevice := stageDevices[lastName]
+			logrus.Print("last device: %v")
 			delete(stageDevices, lastName)
 			stageDevices["device"] = lastDevice
 
