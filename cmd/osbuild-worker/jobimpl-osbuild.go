@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"net/url"
 	"os"
+	"os/exec"
 	"path"
 	"strings"
 
@@ -40,14 +41,15 @@ type S3Configuration struct {
 }
 
 type OSBuildJobImpl struct {
-	Store       string
-	Output      string
-	KojiServers map[string]kojiServer
-	GCPCreds    string
-	AzureCreds  *azure.Credentials
-	AWSCreds    string
-	AWSBucket   string
-	S3Config    S3Configuration
+	Store             string
+	Output            string
+	KojiServers       map[string]kojiServer
+	GCPCreds          string
+	AzureCreds        *azure.Credentials
+	AWSCreds          string
+	AWSBucket         string
+	S3Config          S3Configuration
+	ContainerAuthFile string
 }
 
 // Returns an *awscloud.AWS object with the credentials of the request. If they
@@ -305,8 +307,15 @@ func (impl *OSBuildJobImpl) Run(job worker.Job) error {
 		return nil
 	}
 
+	var extraEnv []string
+	if impl.ContainerAuthFile != "" {
+		extraEnv = []string{
+			fmt.Sprintf("REGISTRY_AUTH_FILE=%s", impl.ContainerAuthFile),
+		}
+	}
+
 	// Run osbuild and handle two kinds of errors
-	osbuildJobResult.OSBuildOutput, err = osbuild.RunOSBuild(jobArgs.Manifest, impl.Store, outputDirectory, exports, nil, true, os.Stderr)
+	osbuildJobResult.OSBuildOutput, err = osbuild.RunOSBuild(jobArgs.Manifest, impl.Store, outputDirectory, exports, nil, extraEnv, true, os.Stderr)
 	// First handle the case when "running" osbuild failed
 	if err != nil {
 		osbuildJobResult.JobError = clienterrors.WorkerClientError(clienterrors.ErrorBuildJob, "osbuild build failed")
@@ -418,7 +427,22 @@ func (impl *OSBuildJobImpl) Run(job worker.Job) error {
 			if impl.AWSBucket != "" {
 				bucket = impl.AWSBucket
 			}
-			_, err = a.Upload(path.Join(outputDirectory, jobTarget.OsbuildArtifact.ExportName, jobTarget.OsbuildArtifact.ExportFilename), bucket, key)
+
+			// TODO: Remove this once multiple exports will be supported and used by image definitions
+			// RHUI images tend to be produced as archives in Brew to save disk space,
+			// however they can't be imported to the cloud provider as an archive.
+			// Workaround this situation for Koji composes by checking if the image file
+			// is an archive and if it is, extract it before uploading to the cloud.
+			imagePath := path.Join(outputDirectory, jobTarget.OsbuildArtifact.ExportName, jobTarget.OsbuildArtifact.ExportFilename)
+			if strings.HasSuffix(imagePath, ".xz") {
+				imagePath, err = extractXzArchive(imagePath)
+				if err != nil {
+					targetResult.TargetError = clienterrors.WorkerClientError(clienterrors.ErrorTargetError, "Failed to extract compressed image", err.Error())
+					break
+				}
+			}
+
+			_, err = a.Upload(imagePath, bucket, key)
 			if err != nil {
 				targetResult.TargetError = clienterrors.WorkerClientError(clienterrors.ErrorUploadingImage, err.Error())
 				break
@@ -614,6 +638,20 @@ func (impl *OSBuildJobImpl) Run(job worker.Job) error {
 			// Azure cannot create an image from a blob without .vhd extension
 			blobName := azure.EnsureVHDExtension(jobTarget.ImageName)
 
+			// TODO: Remove this once multiple exports will be supported and used by image definitions
+			// RHUI images tend to be produced as archives in Brew to save disk space,
+			// however they can't be imported to the cloud provider as an archive.
+			// Workaround this situation for Koji composes by checking if the image file
+			// is an archive and if it is, extract it before uploading to the cloud.
+			imagePath := path.Join(outputDirectory, jobTarget.OsbuildArtifact.ExportName, jobTarget.OsbuildArtifact.ExportFilename)
+			if strings.HasSuffix(imagePath, ".xz") {
+				imagePath, err = extractXzArchive(imagePath)
+				if err != nil {
+					targetResult.TargetError = clienterrors.WorkerClientError(clienterrors.ErrorTargetError, "Failed to extract compressed image", err.Error())
+					break
+				}
+			}
+
 			logWithId.Info("[Azure] ⬆ Uploading the image")
 			err = azureStorageClient.UploadPageBlob(
 				azure.BlobMetadata{
@@ -621,7 +659,7 @@ func (impl *OSBuildJobImpl) Run(job worker.Job) error {
 					ContainerName:  storageContainer,
 					BlobName:       blobName,
 				},
-				path.Join(outputDirectory, jobTarget.OsbuildArtifact.ExportName, jobTarget.OsbuildArtifact.ExportFilename),
+				imagePath,
 				azure.DefaultUploadThreads,
 			)
 			if err != nil {
@@ -789,4 +827,20 @@ func (impl *OSBuildJobImpl) Run(job worker.Job) error {
 	}
 
 	return nil
+}
+
+// extractXzArchive extracts the provided XZ archive in the same directory
+// and returns the path to decompressed file.
+func extractXzArchive(archivePath string) (string, error) {
+	workingDir, archiveFilename := path.Split(archivePath)
+	decompressedFilename := strings.TrimSuffix(archiveFilename, ".xz")
+
+	cmd := exec.Command("xz", "-d", archivePath)
+	cmd.Dir = workingDir
+	err := cmd.Run()
+	if err != nil {
+		return "", err
+	}
+
+	return path.Join(workingDir, decompressedFilename), nil
 }

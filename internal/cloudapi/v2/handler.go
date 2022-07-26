@@ -299,10 +299,6 @@ func (h *apiHandlers) PostCompose(ctx echo.Context) error {
 				return HTTPError(ErrorJSONUnMarshallingError)
 			}
 		} else {
-			// TODO: support uploads also for koji
-			if request.Koji != nil {
-				return HTTPError(ErrorJSONUnMarshallingError)
-			}
 			/* oneOf is not supported by the openapi generator so marshal and unmarshal the uploadrequest based on the type */
 			switch ir.ImageType {
 			case ImageTypesAws:
@@ -371,6 +367,8 @@ func (h *apiHandlers) PostCompose(ctx echo.Context) error {
 
 				irTarget = t
 			case ImageTypesGcp:
+				fallthrough
+			case ImageTypesGcpRhui:
 				var gcpUploadOptions GCPUploadOptions
 				jsonUploadOptions, err := json.Marshal(*ir.UploadOptions)
 				if err != nil {
@@ -485,6 +483,8 @@ func imageTypeFromApiImageType(it ImageTypes, arch distro.Arch) string {
 		return "ec2-sap"
 	case ImageTypesGcp:
 		return "gce"
+	case ImageTypesGcpRhui:
+		return "gce-rhui"
 	case ImageTypesAzure:
 		return "vhd"
 	case ImageTypesAzureRhui:
@@ -510,6 +510,53 @@ func imageTypeFromApiImageType(it ImageTypes, arch distro.Arch) string {
 		return "rhel-edge-installer"
 	}
 	return ""
+}
+
+func targetResultToUploadStatus(t *target.TargetResult) (*UploadStatus, error) {
+	var us *UploadStatus
+	var uploadType UploadTypes
+	var uploadOptions interface{}
+
+	switch t.Name {
+	case target.TargetNameAWS:
+		uploadType = UploadTypesAws
+		awsOptions := t.Options.(*target.AWSTargetResultOptions)
+		uploadOptions = AWSEC2UploadStatus{
+			Ami:    awsOptions.Ami,
+			Region: awsOptions.Region,
+		}
+	case target.TargetNameAWSS3:
+		uploadType = UploadTypesAwsS3
+		awsOptions := t.Options.(*target.AWSS3TargetResultOptions)
+		uploadOptions = AWSS3UploadStatus{
+			Url: awsOptions.URL,
+		}
+	case target.TargetNameGCP:
+		uploadType = UploadTypesGcp
+		gcpOptions := t.Options.(*target.GCPTargetResultOptions)
+		uploadOptions = GCPUploadStatus{
+			ImageName: gcpOptions.ImageName,
+			ProjectId: gcpOptions.ProjectID,
+		}
+	case target.TargetNameAzureImage:
+		uploadType = UploadTypesAzure
+		gcpOptions := t.Options.(*target.AzureImageTargetResultOptions)
+		uploadOptions = AzureUploadStatus{
+			ImageName: gcpOptions.ImageName,
+		}
+	default:
+		return nil, fmt.Errorf("unknown upload target: %s", t.Name)
+	}
+
+	us = &UploadStatus{
+		// TODO: determine upload status based on the target results, not job results
+		// Don't set the status here for now, but let it be set by the caller.
+		//Status:  UploadStatusValue(result.UploadStatus),
+		Type:    uploadType,
+		Options: uploadOptions,
+	}
+
+	return us, nil
 }
 
 func (h *apiHandlers) GetComposeStatus(ctx echo.Context, id string) error {
@@ -545,47 +592,13 @@ func (h *apiHandlers) getComposeStatusImpl(ctx echo.Context, id string) error {
 			if len(result.TargetResults) != 1 {
 				return HTTPError(ErrorSeveralUploadTargets)
 			}
-			tr := *result.TargetResults[0]
-
-			var uploadType UploadTypes
-			var uploadOptions interface{}
-
-			switch tr.Name {
-			case target.TargetNameAWS:
-				uploadType = UploadTypesAws
-				awsOptions := tr.Options.(*target.AWSTargetResultOptions)
-				uploadOptions = AWSEC2UploadStatus{
-					Ami:    awsOptions.Ami,
-					Region: awsOptions.Region,
-				}
-			case target.TargetNameAWSS3:
-				uploadType = UploadTypesAwsS3
-				awsOptions := tr.Options.(*target.AWSS3TargetResultOptions)
-				uploadOptions = AWSS3UploadStatus{
-					Url: awsOptions.URL,
-				}
-			case target.TargetNameGCP:
-				uploadType = UploadTypesGcp
-				gcpOptions := tr.Options.(*target.GCPTargetResultOptions)
-				uploadOptions = GCPUploadStatus{
-					ImageName: gcpOptions.ImageName,
-					ProjectId: gcpOptions.ProjectID,
-				}
-			case target.TargetNameAzureImage:
-				uploadType = UploadTypesAzure
-				gcpOptions := tr.Options.(*target.AzureImageTargetResultOptions)
-				uploadOptions = AzureUploadStatus{
-					ImageName: gcpOptions.ImageName,
-				}
-			default:
+			tr := result.TargetResults[0]
+			us, err = targetResultToUploadStatus(tr)
+			if err != nil {
 				return HTTPError(ErrorUnknownUploadTarget)
 			}
-
-			us = &UploadStatus{
-				Status:  UploadStatusValue(result.UploadStatus),
-				Type:    uploadType,
-				Options: uploadOptions,
-			}
+			// TODO: determine upload status based on the target results, not job results
+			us.Status = UploadStatusValue(result.UploadStatus)
 		}
 
 		return ctx.JSON(http.StatusOK, ComposeStatus{
@@ -627,10 +640,30 @@ func (h *apiHandlers) getComposeStatusImpl(ctx echo.Context, id string) error {
 			if err != nil {
 				return HTTPError(ErrorGettingBuildDependencyStatus)
 			}
+
+			var us *UploadStatus
+			// Only a single upload target in addition to Koji is allowed.
+			// Koji target is always added to osbuild jobs for Koji compose
+			// by the enqueueKojiCompose() function.
+			if len(buildJobResult.TargetResults) > 2 {
+				return HTTPError(ErrorSeveralUploadTargets)
+			}
+			for _, tr := range buildJobResult.TargetResults {
+				if tr.Name != target.TargetNameKoji {
+					us, err = targetResultToUploadStatus(tr)
+					if err != nil {
+						return HTTPError(ErrorUnknownUploadTarget)
+					}
+					// TODO: determine upload status based on the target results, not job results
+					us.Status = UploadStatusValue(buildJobResult.UploadStatus)
+				}
+			}
+
 			buildJobResults = append(buildJobResults, buildJobResult)
 			buildJobStatuses = append(buildJobStatuses, ImageStatus{
-				Status: imageStatusFromKojiJobStatus(buildJobStatus, &initResult, &buildJobResult),
-				Error:  composeStatusErrorFromJobError(buildJobError),
+				Status:       imageStatusFromKojiJobStatus(buildJobStatus, &initResult, &buildJobResult),
+				Error:        composeStatusErrorFromJobError(buildJobError),
+				UploadStatus: us,
 			})
 		}
 		response := ComposeStatus{

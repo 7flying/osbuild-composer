@@ -75,6 +75,20 @@ func (j *OSBuildJobResult) TargetErrors() []*clienterrors.Error {
 	return targetErrors
 }
 
+// TargetResultsByName iterates over TargetResults attached to the Job result and
+// returns a slice of Target results of the provided name (type). If there were no
+// TargetResults of the desired type attached to the Job results, the returned
+// slice will be empty.
+func (j *OSBuildJobResult) TargetResultsByName(name target.TargetName) []*target.TargetResult {
+	targetResults := []*target.TargetResult{}
+	for _, targetResult := range j.TargetResults {
+		if targetResult.Name == name {
+			targetResults = append(targetResults, targetResult)
+		}
+	}
+	return targetResults
+}
+
 type KojiInitJob struct {
 	Server  string `json:"server"`
 	Name    string `json:"name"`
@@ -219,6 +233,26 @@ type ManifestJobByID struct{}
 type ManifestJobByIDResult struct {
 	Manifest distro.Manifest `json:"data,omitempty"`
 	Error    string          `json:"error"`
+	JobResult
+}
+
+type ContainerSpec struct {
+	Source    string `json:"source"`
+	Name      string `json:"name"`
+	TLSVerify *bool  `json:"tls-verify,omitempty"`
+
+	ImageID string `json:"image_id"`
+	Digest  string `json:"digest"`
+}
+
+type ContainerResolveJob struct {
+	Arch  string          `json:"arch"`
+	Specs []ContainerSpec `json:"specs"`
+}
+
+type ContainerResolveJobResult struct {
+	Specs []ContainerSpec `json:"specs"`
+
 	JobResult
 }
 

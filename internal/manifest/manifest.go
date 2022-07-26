@@ -88,3 +88,23 @@ func (m Manifest) Serialize(packageSets map[string][]rpmmd.PackageSpec) (distro.
 		},
 	)
 }
+
+func (m Manifest) GetCheckpoints() []string {
+	checkpoints := []string{}
+	for _, p := range m.pipelines {
+		if p.getCheckpoint() {
+			checkpoints = append(checkpoints, p.Name())
+		}
+	}
+	return checkpoints
+}
+
+func (m Manifest) GetExports() []string {
+	exports := []string{}
+	for _, p := range m.pipelines {
+		if p.getExport() {
+			exports = append(exports, p.Name())
+		}
+	}
+	return exports
+}
