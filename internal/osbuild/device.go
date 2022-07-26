@@ -101,6 +101,7 @@ func GenDeviceCreationStages(pt *disk.PartitionTable, filename string) []*Stage 
 
 func GenDeviceFinishStages(pt *disk.PartitionTable, filename string) []*Stage {
 	stages := make([]*Stage, 0)
+	removeKeyStages := make([]*Stage, 0)
 
 	genStages := func(e disk.Entity, path []disk.Entity) error {
 
@@ -117,7 +118,10 @@ func GenDeviceFinishStages(pt *disk.PartitionTable, filename string) []*Stage {
 
 			if ent.Clevis != nil {
 				if ent.Clevis.RemovePassphrase {
-					stages = append(stages, NewLUKS2RemoveKeyStage(&LUKS2RemoveKeyStageOptions{
+					// stages = append(stages, NewLUKS2RemoveKeyStage(&LUKS2RemoveKeyStageOptions{
+					// 	Passphrase: ent.Passphrase,
+					// }, stageDevices))
+					removeKeyStages = append(removeKeyStages, NewLUKS2RemoveKeyStage(&LUKS2RemoveKeyStageOptions{
 						Passphrase: ent.Passphrase,
 					}, stageDevices))
 				}
@@ -151,17 +155,25 @@ func GenDeviceFinishStages(pt *disk.PartitionTable, filename string) []*Stage {
 			// temporally change the order from:
 			// org.osbuild.luks2.remove-key, org.osbuild.lvm2.metadata
 			// to lvm2.metadata followed by luks2.remove-key
-			new_stages := make([]*Stage, 0)
-			new_stages = append(new_stages, stages[:len(stages)-2]...)
-			new_stages = append(new_stages, stages[len(stages)-1])
-			new_stages = append(new_stages, stages[len(stages)-2])
-			stages = new_stages
+			// new_stages := make([]*Stage, 0)
+			// new_stages = append(new_stages, stages[:len(stages)-2]...)
+			// new_stages = append(new_stages, stages[len(stages)-1])
+			// new_stages = append(new_stages, stages[len(stages)-2])
+			// stages = new_stages
 		}
 
 		return nil
 	}
 
 	_ = pt.ForEachEntity(genStages)
+	// Ensure that "org.osbuild.luks2.remove-key" stages are done after
+	// "org.osbuild.lvm2.metadata" stages; we cannot open a device if its
+	// password has changed
+	stages = append(stages, removeKeyStages...)
+	logrus.Print("finish printing stages: ")
+	for i, v := range stages {
+		logrus.Print(i, v)
+	}
 	return stages
 }
 
