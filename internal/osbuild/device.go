@@ -124,7 +124,7 @@ func GenDeviceFinishStages(pt *disk.PartitionTable, filename string) []*Stage {
 			}
 			logrus.Print("printing stages: ")
 			for i, v := range stages {
-				logrus.Print("%d %+v", i, v)
+				logrus.Print(i, v)
 			}
 		case *disk.LVMVolumeGroup:
 			logrus.Print("GenDeviceFinishStages - LVMVolumeGroup")
@@ -134,7 +134,7 @@ func GenDeviceFinishStages(pt *disk.PartitionTable, filename string) []*Stage {
 			// "org.osbuild.lvm2.metadata" expects a "device" to rename the VG,
 			// thus rename the last device to "device"
 			lastDevice := stageDevices[lastName]
-			logrus.Print("last device: %v")
+			logrus.Print("last device: ", lastDevice)
 			delete(stageDevices, lastName)
 			stageDevices["device"] = lastDevice
 
@@ -146,8 +146,16 @@ func GenDeviceFinishStages(pt *disk.PartitionTable, filename string) []*Stage {
 			stages = append(stages, stage)
 			logrus.Print("printing stages: ")
 			for i, v := range stages {
-				logrus.Print("%d %+v", i, v)
+				logrus.Print(i, v)
 			}
+			// temporally change the order from:
+			// org.osbuild.luks2.remove-key, org.osbuild.lvm2.metadata
+			// to lvm2.metadata followed by luks2.remove-key
+			new_stages := make([]*Stage, 0)
+			new_stages = append(new_stages, stages[:len(stages)-2]...)
+			new_stages = append(new_stages, stages[len(stages)-1])
+			new_stages = append(new_stages, stages[len(stages)-2])
+			stages = new_stages
 		}
 
 		return nil
