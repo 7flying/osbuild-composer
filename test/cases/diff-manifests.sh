@@ -2,15 +2,15 @@
 
 set -euo pipefail
 
-artifacts="/tmp/artifacts"
-mkdir -p "${artifacts}"
-
 # Colorful output.
 function greenprint {
     echo -e "\033[1;32m[$(date -Isecond)] ${1}\033[0m"
 }
 function redprint {
     echo -e "\033[1;31m[$(date -Isecond)] ${1}\033[0m"
+}
+function revert_to_head {
+   git checkout "$head"
 }
 
 if [[ "${CI_COMMIT_BRANCH}" != PR-* ]]; then
@@ -63,6 +63,8 @@ if (( err != 0 )); then
     exit 1
 fi
 
+# revert to $head on exit
+trap revert_to_head EXIT
 greenprint "Checking out merge-base ${mergebase}"
 git checkout "${mergebase}"
 
@@ -90,10 +92,10 @@ if (( err == 0 )); then
 fi
 
 greenprint "Manifests differ"
-echo "${diff}" > "${artifacts}/manifests.diff"
+echo "${diff}" > "manifests.diff"
 greenprint "Saved diff in job artifacts"
 
-artifacts_url="${CI_JOB_URL}/artifacts/browse/ci-artifacts"
+artifacts_url="${CI_JOB_URL}/artifacts/browse"
 
 cat > "${review_data_file}" << EOF
 {"body":"⚠️ This PR introduces changes in at least one manifest (when comparing PR HEAD ${head} with the ${basebranch} merge-base ${mergebase}).  Please review the changes.  The changes can be found in the [artifacts of the \`Manifest-diff\` job [0]](${artifacts_url}) as \`manifests.diff\`.\n\n${merge_base_fail}[0] ${artifacts_url}","event":"COMMENT"}
