@@ -219,14 +219,14 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 					Clevis: &disk.ClevisBind{
 						Pin:              "null",
 						Policy:           "{}",
-						RemovePassphrase: false,
+						RemovePassphrase: true,
 					},
 					Payload: &disk.LVMVolumeGroup{
 						Name:        "rootvg",
 						Description: "built with lvm2 and osbuild",
 						LogicalVolumes: []disk.LVMLogicalVolume{
 							{
-								Size: 2 * 1024 * 1024 * 1024, // GB
+								//Size: 2 * 1024 * 1024 * 1024, // GB
 								Name: "rootlv",
 								Payload: &disk.Filesystem{
 									Type:         "xfs",
