@@ -219,7 +219,7 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 					Clevis: &disk.ClevisBind{
 						Pin:              "null",
 						Policy:           "{}",
-						RemovePassphrase: true,
+						RemovePassphrase: false,
 					},
 					Payload: &disk.LVMVolumeGroup{
 						Name:        "rootvg",
@@ -239,14 +239,6 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 							},
 						},
 					},
-					// Payload: &disk.Filesystem{
-					// 	Type:         "xfs",
-					// 	Label:        "root",
-					// 	Mountpoint:   "/",
-					// 	FSTabOptions: "defaults",
-					// 	FSTabFreq:    0,
-					// 	FSTabPassNo:  0,
-					// },
 				},
 			},
 		},
