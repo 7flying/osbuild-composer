@@ -244,14 +244,32 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 						Policy:           "{}",
 						RemovePassphrase: true,
 					},
-					Payload: &disk.Filesystem{
-						Type:         "xfs",
-						Label:        "root",
-						Mountpoint:   "/",
-						FSTabOptions: "defaults",
-						FSTabFreq:    0,
-						FSTabPassNo:  0,
+					Payload: &disk.LVMVolumeGroup{
+						Name:        "rootvg",
+						Description: "built with lvm2 and osbuild",
+						LogicalVolumes: []disk.LVMLogicalVolume{
+							{
+								//Size: 2 * 1024 * 1024 * 1024, // GB
+								Name: "rootlv",
+								Payload: &disk.Filesystem{
+									Type:         "xfs",
+									Label:        "root",
+									Mountpoint:   "/",
+									FSTabOptions: "defaults",
+									FSTabFreq:    0,
+									FSTabPassNo:  0,
+								},
+							},
+						},
 					},
+					// Payload: &disk.Filesystem{
+					// 	Type:         "xfs",
+					// 	Label:        "root",
+					// 	Mountpoint:   "/",
+					// 	FSTabOptions: "defaults",
+					// 	FSTabFreq:    0,
+					// 	FSTabPassNo:  0,
+					// },
 				},
 			},
 		},
