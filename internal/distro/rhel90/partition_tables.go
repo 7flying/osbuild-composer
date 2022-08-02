@@ -226,7 +226,7 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 						Description: "built with lvm2 and osbuild",
 						LogicalVolumes: []disk.LVMLogicalVolume{
 							{
-								Size: 10 * 1024 * 1024 * 1024, // 10 GB
+								Size: 7 * 1024 * 1024 * 1024, // 10 GB
 								Name: "rootlv",
 								Payload: &disk.Filesystem{
 									Type:         "xfs",
@@ -287,17 +287,27 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 						Parallelism: 1,
 					},
 					Clevis: &disk.ClevisBind{
-						Pin:    "null",
-						Policy: "{}",
-						//RemovePassphrase: true,
+						Pin:              "null",
+						Policy:           "{}",
+						RemovePassphrase: true,
 					},
-					Payload: &disk.Filesystem{
-						Type:         "xfs",
-						Label:        "root",
-						Mountpoint:   "/",
-						FSTabOptions: "defaults",
-						FSTabFreq:    0,
-						FSTabPassNo:  0,
+					Payload: &disk.LVMVolumeGroup{
+						Name:        "rootvg",
+						Description: "built with lvm2 and osbuild",
+						LogicalVolumes: []disk.LVMLogicalVolume{
+							{
+								//Size: 5 * 1024 * 1024 * 1024, // 10 GB
+								Name: "rootlv",
+								Payload: &disk.Filesystem{
+									Type:         "xfs",
+									Label:        "root",
+									Mountpoint:   "/",
+									FSTabOptions: "defaults",
+									FSTabFreq:    0,
+									FSTabPassNo:  0,
+								},
+							},
+						},
 					},
 				},
 			},
