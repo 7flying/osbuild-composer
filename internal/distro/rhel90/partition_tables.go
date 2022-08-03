@@ -226,7 +226,7 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 						Description: "built with lvm2 and osbuild",
 						LogicalVolumes: []disk.LVMLogicalVolume{
 							{
-								Size: 7 * 1024 * 1024 * 1024, // 10 GB
+								Size: 9.5 * 1024 * 1024 * 1024, // 9.5 GB
 								Name: "rootlv",
 								Payload: &disk.Filesystem{
 									Type:         "xfs",
@@ -296,7 +296,7 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 						Description: "built with lvm2 and osbuild",
 						LogicalVolumes: []disk.LVMLogicalVolume{
 							{
-								//Size: 5 * 1024 * 1024 * 1024, // 10 GB
+								Size: 9.5 * 1024 * 1024 * 1024, // 9.5 GB
 								Name: "rootlv",
 								Payload: &disk.Filesystem{
 									Type:         "xfs",
