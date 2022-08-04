@@ -2210,14 +2210,6 @@
                     }
                   },
                   {
-                    "id": "sha256:ef2261275c64411ac198bd10da76eb5bedc4fbe2f52cae1f01b212968d0ae39a",
-                    "options": {
-                      "metadata": {
-                        "rpm.check_gpg": true
-                      }
-                    }
-                  },
-                  {
                     "id": "sha256:7ae244bf549eaa426975ef377b1346cca8fc756bfb12170789c854c83e8fa7a7",
                     "options": {
                       "metadata": {
@@ -2627,14 +2619,6 @@
                   },
                   {
                     "id": "sha256:defa47f5799acbf95283507deaf3d7cefdec0980268dafb926b30beddcfd594d",
-                    "options": {
-                      "metadata": {
-                        "rpm.check_gpg": true
-                      }
-                    }
-                  },
-                  {
-                    "id": "sha256:3b918f21bcdd47100ab8076354f250888db6d665c8876c3ea3e12a0239bf02dd",
                     "options": {
                       "metadata": {
                         "rpm.check_gpg": true
@@ -5480,9 +5464,6 @@
           "sha256:3b5ce98a03a3336a3f32ac7a0867fbc23da702e8618bfd20d49d882d42a460f4": {
             "url": "https://rpmrepo.osbuild.org/v2/mirror/public/el9/cs9-x86_64-baseos-20220208/Packages/gzip-1.10-8.el9.x86_64.rpm"
           },
-          "sha256:3b918f21bcdd47100ab8076354f250888db6d665c8876c3ea3e12a0239bf02dd": {
-            "url": "https://rpmrepo.osbuild.org/v2/mirror/public/el9/cs9-x86_64-baseos-20220208/Packages/dracut-config-rescue-055-10.git20210824.el9.x86_64.rpm"
-          },
           "sha256:3bb064ceb18523e043c75d9d90ff3c2fccf6dbd93377c2557d7d2ae30e528fc1": {
             "url": "https://rpmrepo.osbuild.org/v2/mirror/public/el9/cs9-x86_64-appstream-20220208/Packages/pbzip2-1.1.13-6.el9.x86_64.rpm"
           },
@@ -6265,9 +6246,6 @@
           },
           "sha256:edab8459488d631c21b4a1f06260f2b0d08a0fd3f1a2c578043a34ac6a353cbc": {
             "url": "https://rpmrepo.osbuild.org/v2/mirror/public/el9/cs9-x86_64-baseos-20220208/Packages/openssh-server-8.7p1-6.el9.x86_64.rpm"
-          },
-          "sha256:ef2261275c64411ac198bd10da76eb5bedc4fbe2f52cae1f01b212968d0ae39a": {
-            "url": "https://rpmrepo.osbuild.org/v2/mirror/public/el9/cs9-x86_64-appstream-20220208/Packages/qemu-guest-agent-6.2.0-5.el9.x86_64.rpm"
           },
           "sha256:f006c0e7cb58cb74f8cdc7abc3455a6d27b735e6a4540dff856b9c6a7af62d5a": {
             "url": "https://rpmrepo.osbuild.org/v2/mirror/public/el9/cs9-x86_64-baseos-20220208/Packages/parted-3.4-6.el9.x86_64.rpm"
@@ -9019,16 +8997,6 @@
         "check_gpg": true
       },
       {
-        "name": "qemu-guest-agent",
-        "epoch": 17,
-        "version": "6.2.0",
-        "release": "5.el9",
-        "arch": "x86_64",
-        "remote_location": "https://rpmrepo.osbuild.org/v2/mirror/public/el9/cs9-x86_64-appstream-20220208/Packages/qemu-guest-agent-6.2.0-5.el9.x86_64.rpm",
-        "checksum": "sha256:ef2261275c64411ac198bd10da76eb5bedc4fbe2f52cae1f01b212968d0ae39a",
-        "check_gpg": true
-      },
-      {
         "name": "rpm-plugin-systemd-inhibit",
         "epoch": 0,
         "version": "4.16.1.3",
@@ -9546,16 +9514,6 @@
         "arch": "x86_64",
         "remote_location": "https://rpmrepo.osbuild.org/v2/mirror/public/el9/cs9-x86_64-baseos-20220208/Packages/dracut-config-generic-055-10.git20210824.el9.x86_64.rpm",
         "checksum": "sha256:defa47f5799acbf95283507deaf3d7cefdec0980268dafb926b30beddcfd594d",
-        "check_gpg": true
-      },
-      {
-        "name": "dracut-config-rescue",
-        "epoch": 0,
-        "version": "055",
-        "release": "10.git20210824.el9",
-        "arch": "x86_64",
-        "remote_location": "https://rpmrepo.osbuild.org/v2/mirror/public/el9/cs9-x86_64-baseos-20220208/Packages/dracut-config-rescue-055-10.git20210824.el9.x86_64.rpm",
-        "checksum": "sha256:3b918f21bcdd47100ab8076354f250888db6d665c8876c3ea3e12a0239bf02dd",
         "check_gpg": true
       },
       {

@@ -173,6 +173,19 @@ func (h *apiHandlers) PostCompose(ctx echo.Context) error {
 		}
 	}
 
+	if request.Customizations != nil && request.Customizations.Containers != nil {
+		for _, c := range *request.Customizations.Containers {
+			bc := blueprint.Container{
+				Source:    c.Source,
+				TLSVerify: c.TlsVerify,
+			}
+			if c.Name != nil {
+				bc.Name = *c.Name
+			}
+			bp.Containers = append(bp.Containers, bc)
+		}
+	}
+
 	if request.Customizations != nil && request.Customizations.Filesystem != nil {
 		var fsCustomizations []blueprint.FilesystemCustomization
 		for _, f := range *request.Customizations.Filesystem {
@@ -344,8 +357,6 @@ func (h *apiHandlers) PostCompose(ctx echo.Context) error {
 				fallthrough
 			case ImageTypesEdgeInstaller:
 				fallthrough
-			case ImageTypesEdgeContainer:
-				fallthrough
 			case ImageTypesEdgeCommit:
 				var awsS3UploadOptions AWSS3UploadOptions
 				jsonUploadOptions, err := json.Marshal(*ir.UploadOptions)
@@ -363,6 +374,31 @@ func (h *apiHandlers) PostCompose(ctx echo.Context) error {
 					Key:    key,
 				})
 				t.ImageName = key
+				t.OsbuildArtifact.ExportFilename = imageType.Filename()
+
+				irTarget = t
+			case ImageTypesEdgeContainer:
+				var containerUploadOptions ContainerUploadOptions
+				jsonUploadOptions, err := json.Marshal(*ir.UploadOptions)
+				if err != nil {
+					return HTTPError(ErrorJSONMarshallingError)
+				}
+				err = json.Unmarshal(jsonUploadOptions, &containerUploadOptions)
+				if err != nil {
+					return HTTPError(ErrorJSONUnMarshallingError)
+				}
+
+				var name = request.Distribution
+				var tag = uuid.New().String()
+				if containerUploadOptions.Name != nil {
+					name = *containerUploadOptions.Name
+					if containerUploadOptions.Tag != nil {
+						tag = *containerUploadOptions.Tag
+					}
+				}
+
+				t := target.NewContainerTarget(&target.ContainerTargetOptions{})
+				t.ImageName = fmt.Sprintf("%s:%s", name, tag)
 				t.OsbuildArtifact.ExportFilename = imageType.Filename()
 
 				irTarget = t
@@ -544,6 +580,14 @@ func targetResultToUploadStatus(t *target.TargetResult) (*UploadStatus, error) {
 		uploadOptions = AzureUploadStatus{
 			ImageName: gcpOptions.ImageName,
 		}
+	case target.TargetNameContainer:
+		uploadType = UploadTypesContainer
+		containerOptions := t.Options.(*target.ContainerTargetResultOptions)
+		uploadOptions = ContainerUploadStatus{
+			Url:    containerOptions.URL,
+			Digest: containerOptions.Digest,
+		}
+
 	default:
 		return nil, fmt.Errorf("unknown upload target: %s", t.Name)
 	}
@@ -691,11 +735,14 @@ func composeStatusErrorFromJobError(jobError *clienterrors.Error) *ComposeStatus
 	if jobError == nil {
 		return nil
 	}
-	return &ComposeStatusError{
-		Id:      int(jobError.ID),
-		Reason:  jobError.Reason,
-		Details: &jobError.Details,
+	err := &ComposeStatusError{
+		Id:     int(jobError.ID),
+		Reason: jobError.Reason,
 	}
+	if jobError.Details != nil {
+		err.Details = &jobError.Details
+	}
+	return err
 }
 
 func imageStatusFromOSBuildJobStatus(js *worker.JobStatus, result *worker.OSBuildJobResult) ImageStatusValue {

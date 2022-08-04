@@ -183,130 +183,82 @@ install -m 0644 -vp docs/*.7                                       %{buildroot}%
 
 #%if %{with tests} || 0%{?rhel}
 
-# install -m 0755 -vd                                                %{buildroot}%{_libexecdir}/osbuild-composer-test
-# install -m 0755 -vp _bin/osbuild-composer-cli-tests                %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp _bin/osbuild-weldr-tests                       %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp _bin/osbuild-dnf-json-tests                    %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp _bin/osbuild-image-tests                       %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp _bin/osbuild-auth-tests                        %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp _bin/osbuild-koji-tests                        %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp _bin/osbuild-composer-dbjobqueue-tests         %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp _bin/osbuild-composer-manifest-tests           %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp _bin/osbuild-service-maintenance-tests         %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp _bin/osbuild-mock-openid-provider              %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp tools/define-compose-url.sh                    %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp tools/provision.sh                             %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp tools/gen-certs.sh                             %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp tools/gen-ssh.sh                               %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp tools/image-info                               %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp tools/run-koji-container.sh                    %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp tools/koji-compose.py                          %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp tools/libvirt_test.sh                          %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp tools/s3_test.sh                               %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp tools/generic_s3_test.sh                       %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp tools/generic_s3_https_test.sh                 %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp tools/set-env-variables.sh                     %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vp tools/test-case-generators/generate-test-cases %{buildroot}%{_libexecdir}/osbuild-composer-test/
-# install -m 0755 -vd                                                %{buildroot}%{_libexecdir}/tests/osbuild-composer
-# install -m 0755 -vp test/cases/*.sh                                %{buildroot}%{_libexecdir}/tests/osbuild-composer/
+install -m 0755 -vd                                                %{buildroot}%{_libexecdir}/osbuild-composer-test
+install -m 0755 -vp _bin/osbuild-composer-cli-tests                %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp _bin/osbuild-weldr-tests                       %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp _bin/osbuild-dnf-json-tests                    %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp _bin/osbuild-image-tests                       %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp _bin/osbuild-auth-tests                        %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp _bin/osbuild-koji-tests                        %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp _bin/osbuild-composer-dbjobqueue-tests         %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp _bin/osbuild-composer-manifest-tests           %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp _bin/osbuild-service-maintenance-tests         %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp _bin/osbuild-mock-openid-provider              %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp tools/define-compose-url.sh                    %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp tools/provision.sh                             %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp tools/gen-certs.sh                             %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp tools/gen-ssh.sh                               %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp tools/image-info                               %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp tools/run-koji-container.sh                    %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp tools/koji-compose.py                          %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp tools/libvirt_test.sh                          %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp tools/s3_test.sh                               %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp tools/generic_s3_test.sh                       %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp tools/generic_s3_https_test.sh                 %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp tools/run-mock-auth-servers.sh                 %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp tools/set-env-variables.sh                     %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vp tools/test-case-generators/generate-test-cases %{buildroot}%{_libexecdir}/osbuild-composer-test/
+install -m 0755 -vd                                                %{buildroot}%{_libexecdir}/tests/osbuild-composer
+install -m 0755 -vp test/cases/*.sh                                %{buildroot}%{_libexecdir}/tests/osbuild-composer/
 
-# install -m 0755 -vd                                                %{buildroot}%{_libexecdir}/tests/osbuild-composer/api
-# install -m 0755 -vp test/cases/api/*.sh                            %{buildroot}%{_libexecdir}/tests/osbuild-composer/api/
+install -m 0755 -vd                                                %{buildroot}%{_libexecdir}/tests/osbuild-composer/api
+install -m 0755 -vp test/cases/api/*.sh                            %{buildroot}%{_libexecdir}/tests/osbuild-composer/api/
 
-# install -m 0755 -vd                                                %{buildroot}%{_libexecdir}/tests/osbuild-composer/api/common
-# install -m 0755 -vp test/cases/api/common/*.sh                     %{buildroot}%{_libexecdir}/tests/osbuild-composer/api/common/
+install -m 0755 -vd                                                %{buildroot}%{_libexecdir}/tests/osbuild-composer/api/common
+install -m 0755 -vp test/cases/api/common/*.sh                     %{buildroot}%{_libexecdir}/tests/osbuild-composer/api/common/
 
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/ansible
-# install -m 0644 -vp test/data/ansible/*                            %{buildroot}%{_datadir}/tests/osbuild-composer/ansible/
+install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/ansible
+install -m 0644 -vp test/data/ansible/*                            %{buildroot}%{_datadir}/tests/osbuild-composer/ansible/
 
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/azure
-# install -m 0644 -vp test/data/azure/*                              %{buildroot}%{_datadir}/tests/osbuild-composer/azure/
+install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/azure
+install -m 0644 -vp test/data/azure/*                              %{buildroot}%{_datadir}/tests/osbuild-composer/azure/
 
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/manifests
-# install -m 0644 -vp test/data/manifests/*                          %{buildroot}%{_datadir}/tests/osbuild-composer/manifests/
+install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/manifests
+install -m 0644 -vp test/data/manifests/*                          %{buildroot}%{_datadir}/tests/osbuild-composer/manifests/
 
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/cloud-init
-# install -m 0644 -vp test/data/cloud-init/*                         %{buildroot}%{_datadir}/tests/osbuild-composer/cloud-init/
+install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/cloud-init
+install -m 0644 -vp test/data/cloud-init/*                         %{buildroot}%{_datadir}/tests/osbuild-composer/cloud-init/
 
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/composer
-# install -m 0644 -vp test/data/composer/*                           %{buildroot}%{_datadir}/tests/osbuild-composer/composer/
+install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/composer
+install -m 0644 -vp test/data/composer/*                           %{buildroot}%{_datadir}/tests/osbuild-composer/composer/
 
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/worker
-# install -m 0644 -vp test/data/worker/*                             %{buildroot}%{_datadir}/tests/osbuild-composer/worker/
+install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/worker
+install -m 0644 -vp test/data/worker/*                             %{buildroot}%{_datadir}/tests/osbuild-composer/worker/
 
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/repositories
-# install -m 0644 -vp test/data/repositories/*                       %{buildroot}%{_datadir}/tests/osbuild-composer/repositories/
+install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/repositories
+install -m 0644 -vp test/data/repositories/*                       %{buildroot}%{_datadir}/tests/osbuild-composer/repositories/
 
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/kerberos
-# install -m 0644 -vp test/data/kerberos/*                           %{buildroot}%{_datadir}/tests/osbuild-composer/kerberos/
+install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/kerberos
+install -m 0644 -vp test/data/kerberos/*                           %{buildroot}%{_datadir}/tests/osbuild-composer/kerberos/
 
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/keyring
-# install -m 0644 -vp test/data/keyring/id_rsa.pub                   %{buildroot}%{_datadir}/tests/osbuild-composer/keyring/
-# install -m 0600 -vp test/data/keyring/id_rsa                       %{buildroot}%{_datadir}/tests/osbuild-composer/keyring/
+install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/keyring
+install -m 0644 -vp test/data/keyring/id_rsa.pub                   %{buildroot}%{_datadir}/tests/osbuild-composer/keyring/
+install -m 0600 -vp test/data/keyring/id_rsa                       %{buildroot}%{_datadir}/tests/osbuild-composer/keyring/
 
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/koji
-# install -m 0644 -vp test/data/koji/*                               %{buildroot}%{_datadir}/tests/osbuild-composer/koji/
+install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/koji
+install -m 0644 -vp test/data/koji/*                               %{buildroot}%{_datadir}/tests/osbuild-composer/koji/
 
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/x509
-# install -m 0644 -vp test/data/x509/*                               %{buildroot}%{_datadir}/tests/osbuild-composer/x509/
+install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/x509
+install -m 0644 -vp test/data/x509/*                               %{buildroot}%{_datadir}/tests/osbuild-composer/x509/
 
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/openshift
-# install -m 0644 -vp test/data/openshift/*                          %{buildroot}%{_datadir}/tests/osbuild-composer/openshift/
+install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/openshift
+install -m 0644 -vp test/data/openshift/*                          %{buildroot}%{_datadir}/tests/osbuild-composer/openshift/
 
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/schemas
-# install -m 0644 -vp pkg/jobqueue/dbjobqueue/schemas/*              %{buildroot}%{_datadir}/tests/osbuild-composer/schemas/
+install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/schemas
+install -m 0644 -vp pkg/jobqueue/dbjobqueue/schemas/*              %{buildroot}%{_datadir}/tests/osbuild-composer/schemas/
 
-# install -m 0755 -vd                                               %{buildroot}%{_datadir}/tests/osbuild-composer/upgrade8to9
-# install -m 0644 -vp test/data/upgrade8to9/*                       %{buildroot}%{_datadir}/tests/osbuild-composer/upgrade8to9/
-
-# install -m 0755 -vd                                                %{buildroot}%{_libexecdir}/tests/osbuild-composer/api
-# install -m 0755 -vp test/cases/api/*.sh                            %{buildroot}%{_libexecdir}/tests/osbuild-composer/api/
-
-# install -m 0755 -vd                                                %{buildroot}%{_libexecdir}/tests/osbuild-composer/api/common
-# install -m 0755 -vp test/cases/api/common/*.sh                     %{buildroot}%{_libexecdir}/tests/osbuild-composer/api/common/
-
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/ansible
-# install -m 0644 -vp test/data/ansible/*                            %{buildroot}%{_datadir}/tests/osbuild-composer/ansible/
-
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/azure
-# install -m 0644 -vp test/data/azure/*                              %{buildroot}%{_datadir}/tests/osbuild-composer/azure/
-
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/manifests
-# install -m 0644 -vp test/data/manifests/*                          %{buildroot}%{_datadir}/tests/osbuild-composer/manifests/
-
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/cloud-init
-# install -m 0644 -vp test/data/cloud-init/*                         %{buildroot}%{_datadir}/tests/osbuild-composer/cloud-init/
-
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/composer
-# install -m 0644 -vp test/data/composer/*                           %{buildroot}%{_datadir}/tests/osbuild-composer/composer/
-
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/worker
-# install -m 0644 -vp test/data/worker/*                             %{buildroot}%{_datadir}/tests/osbuild-composer/worker/
-
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/repositories
-# install -m 0644 -vp test/data/repositories/*                       %{buildroot}%{_datadir}/tests/osbuild-composer/repositories/
-
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/kerberos
-# install -m 0644 -vp test/data/kerberos/*                           %{buildroot}%{_datadir}/tests/osbuild-composer/kerberos/
-
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/keyring
-# install -m 0644 -vp test/data/keyring/id_rsa.pub                   %{buildroot}%{_datadir}/tests/osbuild-composer/keyring/
-# install -m 0600 -vp test/data/keyring/id_rsa                       %{buildroot}%{_datadir}/tests/osbuild-composer/keyring/
-
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/koji
-# install -m 0644 -vp test/data/koji/*                               %{buildroot}%{_datadir}/tests/osbuild-composer/koji/
-
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/x509
-# install -m 0644 -vp test/data/x509/*                               %{buildroot}%{_datadir}/tests/osbuild-composer/x509/
-
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/openshift
-# install -m 0644 -vp test/data/openshift/*                          %{buildroot}%{_datadir}/tests/osbuild-composer/openshift/
-
-# install -m 0755 -vd                                                %{buildroot}%{_datadir}/tests/osbuild-composer/schemas
-# install -m 0644 -vp pkg/jobqueue/dbjobqueue/schemas/*              %{buildroot}%{_datadir}/tests/osbuild-composer/schemas/
-
-# install -m 0755 -vd                                               %{buildroot}%{_datadir}/tests/osbuild-composer/upgrade8to9
-# install -m 0644 -vp test/data/upgrade8to9/*                       %{buildroot}%{_datadir}/tests/osbuild-composer/upgrade8to9/
+install -m 0755 -vd                                               %{buildroot}%{_datadir}/tests/osbuild-composer/upgrade8to9
+install -m 0644 -vp test/data/upgrade8to9/*                       %{buildroot}%{_datadir}/tests/osbuild-composer/upgrade8to9/
 
 #%endif
 

@@ -952,9 +952,6 @@
                     "id": "sha256:f00365d25649f658468a39755e0436ac8e7d6e5f033ffaff5251fe7bb7e5b95a"
                   },
                   {
-                    "id": "sha256:22f900f590759293faf294d79cc7c21ea1d0090816c12d6142d418efbb6d42c7"
-                  },
-                  {
                     "id": "sha256:f5671dc12b61c49f59c21a989d5afba03f7414f65e40f4fdff9fe75381dda5dc"
                   },
                   {
@@ -2248,9 +2245,6 @@
                     "id": "sha256:6d854c991181c69bf0c08d075ecf15e404d17611bddf66e0b7c749abe543aafa"
                   },
                   {
-                    "id": "sha256:c24fef81612662dd27d8bc72f1e8dae00fff3ca1905c630f57e5362803e72f35"
-                  },
-                  {
                     "id": "sha256:49191fa272d3c16c219f1b27fd86bd085fa1ae3bac38946de40926b35773c4c4"
                   },
                   {
@@ -3150,9 +3144,6 @@
           },
           "sha256:2233c5ca2d9b132f78ee7c56ab1effcdb71cdd5a0b6cf302e2e71c6bc220e21c": {
             "url": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-x86_64-appstream-n9.0-20220208/Packages/perl-base-2.27-479.el9.noarch.rpm"
-          },
-          "sha256:22f900f590759293faf294d79cc7c21ea1d0090816c12d6142d418efbb6d42c7": {
-            "url": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-x86_64-baseos-n9.0-20220208/Packages/dracut-config-rescue-055-10.git20210824.el9.x86_64.rpm"
           },
           "sha256:2358982717e4c6df5e0dfc4ad906dade4ecf051cb7612b1aa087ab6c03f36da2": {
             "url": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-x86_64-baseos-n9.0-20220208/Packages/libuser-0.63-7.el9.x86_64.rpm"
@@ -4254,9 +4245,6 @@
           },
           "sha256:c170870a2d1ff32048d13497fa67c382fe5aaf3d8d21bae639356ac28003dba9": {
             "url": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-x86_64-appstream-n9.0-20220208/Packages/perl-Pod-Usage-2.01-4.el9.noarch.rpm"
-          },
-          "sha256:c24fef81612662dd27d8bc72f1e8dae00fff3ca1905c630f57e5362803e72f35": {
-            "url": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-x86_64-appstream-n9.0-20220208/Packages/qemu-guest-agent-6.2.0-5.el9.x86_64.rpm"
           },
           "sha256:c3713e0ffb283367dfe1741477f140ec1d6b6d38158e1bb5294d485f12f30630": {
             "url": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-x86_64-appstream-n9.0-20220208/Packages/perl-SelectSaver-1.02-479.el9.noarch.rpm"
@@ -7271,15 +7259,6 @@
         "arch": "x86_64",
         "remote_location": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-x86_64-baseos-n9.0-20220208/Packages/dracut-config-generic-055-10.git20210824.el9.x86_64.rpm",
         "checksum": "sha256:f00365d25649f658468a39755e0436ac8e7d6e5f033ffaff5251fe7bb7e5b95a"
-      },
-      {
-        "name": "dracut-config-rescue",
-        "epoch": 0,
-        "version": "055",
-        "release": "10.git20210824.el9",
-        "arch": "x86_64",
-        "remote_location": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-x86_64-baseos-n9.0-20220208/Packages/dracut-config-rescue-055-10.git20210824.el9.x86_64.rpm",
-        "checksum": "sha256:22f900f590759293faf294d79cc7c21ea1d0090816c12d6142d418efbb6d42c7"
       },
       {
         "name": "dracut-network",
@@ -11159,15 +11138,6 @@
         "arch": "noarch",
         "remote_location": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-x86_64-appstream-n9.0-20220208/Packages/python3-pytz-2021.1-4.el9.noarch.rpm",
         "checksum": "sha256:6d854c991181c69bf0c08d075ecf15e404d17611bddf66e0b7c749abe543aafa"
-      },
-      {
-        "name": "qemu-guest-agent",
-        "epoch": 17,
-        "version": "6.2.0",
-        "release": "5.el9",
-        "arch": "x86_64",
-        "remote_location": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-x86_64-appstream-n9.0-20220208/Packages/qemu-guest-agent-6.2.0-5.el9.x86_64.rpm",
-        "checksum": "sha256:c24fef81612662dd27d8bc72f1e8dae00fff3ca1905c630f57e5362803e72f35"
       },
       {
         "name": "redhat-logos",

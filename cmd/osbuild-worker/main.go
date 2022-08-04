@@ -128,6 +128,10 @@ func setProtection(protected bool) {
 		}
 		return
 	}
+	if len(asInstanceOutput.AutoScalingInstances) == 0 {
+		logrus.Info("No Autoscaling instace is defined")
+		return
+	}
 
 	// make the request to protect (or unprotect) the instance
 	input := &autoscaling.SetInstanceProtectionInput{
@@ -378,8 +382,16 @@ func main() {
 	}
 
 	var containersAuthFilePath string
+	var containersDomain = ""
+	var containersPathPrefix = ""
+	var containersCertPath = ""
+	var containersTLSVerify = true
 	if config.Containers != nil {
 		containersAuthFilePath = config.Containers.AuthFilePath
+		containersDomain = config.Containers.Domain
+		containersPathPrefix = config.Containers.PathPrefix
+		containersCertPath = config.Containers.CertPath
+		containersTLSVerify = config.Containers.TLSVerify
 	}
 
 	// depsolve jobs can be done during other jobs
@@ -435,7 +447,13 @@ func main() {
 				CABundle:            genericS3CABundle,
 				SkipSSLVerification: genericS3SkipSSLVerification,
 			},
-			ContainerAuthFile: containersAuthFilePath,
+			ContainersConfig: ContainersConfiguration{
+				AuthFilePath: containersAuthFilePath,
+				Domain:       containersDomain,
+				PathPrefix:   containersPathPrefix,
+				CertPath:     containersCertPath,
+				TLSVerify:    &containersTLSVerify,
+			},
 		},
 		worker.JobTypeKojiInit: &KojiInitJobImpl{
 			KojiServers: kojiServers,

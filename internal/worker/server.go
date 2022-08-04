@@ -110,7 +110,7 @@ func (s *Server) WatchHeartbeats() {
 			logrus.Infof("Removing unresponsive job: %s\n", id)
 
 			missingHeartbeatResult := JobResult{
-				JobError: clienterrors.WorkerClientError(clienterrors.ErrorJobMissingHeartbeat, "Worker running this job stopped responding."),
+				JobError: clienterrors.WorkerClientError(clienterrors.ErrorJobMissingHeartbeat, "Worker running this job stopped responding.", nil),
 			}
 
 			resJson, err := json.Marshal(missingHeartbeatResult)
@@ -146,8 +146,11 @@ func (s *Server) EnqueueDepsolve(job *DepsolveJob, channel string) (uuid.UUID, e
 	return s.enqueue(JobTypeDepsolve, job, nil, channel)
 }
 
-func (s *Server) EnqueueManifestJobByID(job *ManifestJobByID, parent uuid.UUID, channel string) (uuid.UUID, error) {
-	return s.enqueue(JobTypeManifestIDOnly, job, []uuid.UUID{parent}, channel)
+func (s *Server) EnqueueManifestJobByID(job *ManifestJobByID, dependencies []uuid.UUID, channel string) (uuid.UUID, error) {
+	if len(dependencies) == 0 {
+		panic("EnqueueManifestJobByID has no dependencies, expected at least a depsolve job")
+	}
+	return s.enqueue(JobTypeManifestIDOnly, job, dependencies, channel)
 }
 
 func (s *Server) EnqueueContainerResolveJob(job *ContainerResolveJob, channel string) (uuid.UUID, error) {
@@ -240,7 +243,6 @@ func (s *Server) JobDependencyChainErrors(id uuid.UUID) (*clienterrors.Error, er
 		if len(depErrors) > 0 {
 			jobError.Details = depErrors
 		}
-
 		return jobError, nil
 	}
 
@@ -259,9 +261,9 @@ func (s *Server) OSBuildJobInfo(id uuid.UUID, result *OSBuildJobResult) (*JobInf
 
 	if result.JobError == nil && !jobInfo.JobStatus.Finished.IsZero() {
 		if result.OSBuildOutput == nil {
-			result.JobError = clienterrors.WorkerClientError(clienterrors.ErrorBuildJob, "osbuild build failed")
+			result.JobError = clienterrors.WorkerClientError(clienterrors.ErrorBuildJob, "osbuild build failed", nil)
 		} else if len(result.OSBuildOutput.Error) > 0 {
-			result.JobError = clienterrors.WorkerClientError(clienterrors.ErrorOldResultCompatible, string(result.OSBuildOutput.Error))
+			result.JobError = clienterrors.WorkerClientError(clienterrors.ErrorOldResultCompatible, string(result.OSBuildOutput.Error), nil)
 		} else if len(result.TargetErrors()) > 0 {
 			result.JobError = clienterrors.WorkerClientError(clienterrors.ErrorTargetError, "at least one target failed", result.TargetErrors())
 		}
@@ -286,7 +288,7 @@ func (s *Server) KojiInitJobInfo(id uuid.UUID, result *KojiInitJobResult) (*JobI
 	}
 
 	if result.JobError == nil && result.KojiError != "" {
-		result.JobError = clienterrors.WorkerClientError(clienterrors.ErrorOldResultCompatible, result.KojiError)
+		result.JobError = clienterrors.WorkerClientError(clienterrors.ErrorOldResultCompatible, result.KojiError, nil)
 	}
 
 	return jobInfo, nil
@@ -303,7 +305,7 @@ func (s *Server) KojiFinalizeJobInfo(id uuid.UUID, result *KojiFinalizeJobResult
 	}
 
 	if result.JobError == nil && result.KojiError != "" {
-		result.JobError = clienterrors.WorkerClientError(clienterrors.ErrorOldResultCompatible, result.KojiError)
+		result.JobError = clienterrors.WorkerClientError(clienterrors.ErrorOldResultCompatible, result.KojiError, nil)
 	}
 
 	return jobInfo, nil
@@ -321,9 +323,9 @@ func (s *Server) DepsolveJobInfo(id uuid.UUID, result *DepsolveJobResult) (*JobI
 
 	if result.JobError == nil && result.Error != "" {
 		if result.ErrorType == DepsolveErrorType {
-			result.JobError = clienterrors.WorkerClientError(clienterrors.ErrorDNFDepsolveError, result.Error)
+			result.JobError = clienterrors.WorkerClientError(clienterrors.ErrorDNFDepsolveError, result.Error, nil)
 		} else {
-			result.JobError = clienterrors.WorkerClientError(clienterrors.ErrorRPMMDError, result.Error)
+			result.JobError = clienterrors.WorkerClientError(clienterrors.ErrorRPMMDError, result.Error, nil)
 		}
 	}
 
@@ -622,6 +624,14 @@ func (s *Server) FinishJob(token uuid.UUID, result json.RawMessage) error {
 			return err
 		}
 		jobResult = &kojiFinalizeJR.JobResult
+
+	case JobTypeContainerResolve:
+		var containerResolveJR ContainerResolveJobResult
+		jobInfo, err = s.ContainerResolveJobInfo(jobId, &containerResolveJR)
+		if err != nil {
+			return err
+		}
+		jobResult = &containerResolveJR.JobResult
 
 	default:
 		return fmt.Errorf("unexpected job type: %s", jobType)

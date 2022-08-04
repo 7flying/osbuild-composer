@@ -21,6 +21,7 @@ CLOUD_PROVIDER_GCP="gcp"
 CLOUD_PROVIDER_AZURE="azure"
 CLOUD_PROVIDER_AWS_S3="aws.s3"
 CLOUD_PROVIDER_GENERIC_S3="generic.s3"
+CLOUD_PROVIDER_CONTAINER_IMAGE_REGISTRY="container"
 
 #
 # Supported Image type names
@@ -62,7 +63,10 @@ case ${IMAGE_TYPE} in
     "$IMAGE_TYPE_GCP")
         CLOUD_PROVIDER="${CLOUD_PROVIDER_GCP}"
         ;;
-    "$IMAGE_TYPE_EDGE_COMMIT"|"$IMAGE_TYPE_EDGE_CONTAINER"|"$IMAGE_TYPE_EDGE_INSTALLER"|"$IMAGE_TYPE_IMAGE_INSTALLER"|"$IMAGE_TYPE_GUEST"|"$IMAGE_TYPE_VSPHERE")
+    "$IMAGE_TYPE_EDGE_CONTAINER")
+        CLOUD_PROVIDER="${CLOUD_PROVIDER_CONTAINER_IMAGE_REGISTRY}"
+        ;;
+    "$IMAGE_TYPE_EDGE_COMMIT"|"$IMAGE_TYPE_EDGE_INSTALLER"|"$IMAGE_TYPE_IMAGE_INSTALLER"|"$IMAGE_TYPE_GUEST"|"$IMAGE_TYPE_VSPHERE")
         # blobby image types: upload to s3 and provide download link
         CLOUD_PROVIDER="${2:-$CLOUD_PROVIDER_AWS_S3}"
         if [ "${CLOUD_PROVIDER}" != "${CLOUD_PROVIDER_AWS_S3}" ] && [ "${CLOUD_PROVIDER}" != "${CLOUD_PROVIDER_GENERIC_S3}" ]; then
@@ -173,6 +177,9 @@ case $CLOUD_PROVIDER in
     ;;
   "$CLOUD_PROVIDER_AZURE")
     source /usr/libexec/tests/osbuild-composer/api/azure.sh
+    ;;
+  "$CLOUD_PROVIDER_CONTAINER_IMAGE_REGISTRY")
+    source /usr/libexec/tests/osbuild-composer/api/container.registry.sh
     ;;
   *)
     echo "Unknown cloud provider: ${CLOUD_PROVIDER}"
@@ -424,9 +431,9 @@ waitForState "failure"
 # crashed/stopped/killed worker should result in a failed state
 sendCompose "$REQUEST_FILE"
 waitForState "building"
-sudo systemctl stop "osbuild-worker@*"
+sudo systemctl stop "osbuild-remote-worker@*"
 waitForState "failure"
-sudo systemctl start "osbuild-worker@1"
+sudo systemctl start "osbuild-remote-worker@localhost:8700.service"
 
 # full integration case
 INIT_COMPOSES="$(collectMetrics)"
@@ -558,7 +565,7 @@ TOKEN="$(curl --request POST \
         http://localhost:443/api/image-builder-composer/v2/composes/"$COMPOSE_ID")" = "401" ]
 
 
-sudo systemctl start osbuild-remote-worker@localhost:8700.service
+sudo systemctl restart osbuild-remote-worker@localhost:8700.service
 sudo systemctl is-active --quiet osbuild-remote-worker@localhost:8700.service
 
 exit 0

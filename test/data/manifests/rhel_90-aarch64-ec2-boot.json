@@ -877,9 +877,6 @@
                     "id": "sha256:6d564871ff46b3e8a0fc5e78fc17a950af1d291397eca19ffe9beb1e97e29f70"
                   },
                   {
-                    "id": "sha256:a39000b7f3c60b35d32b1e57b29ad76cdafcf7e4a069b1fffed1ac670e4d6e86"
-                  },
-                  {
                     "id": "sha256:e3d425107eef5b866e2f39a1e04e2bdddacad0def949017b89acff3a939a0bc7"
                   },
                   {
@@ -1936,9 +1933,6 @@
                     "id": "sha256:6d854c991181c69bf0c08d075ecf15e404d17611bddf66e0b7c749abe543aafa"
                   },
                   {
-                    "id": "sha256:6979fe9b8acfb7e3d4aebb551789e1258d7cc5109a4efb59898b9cb94e470a8b"
-                  },
-                  {
                     "id": "sha256:5750bb4b560044238b945166b92e99c62da5fd3b14faaba8757d78f1b242cf79"
                   },
                   {
@@ -2887,9 +2881,6 @@
           "sha256:688bacfd60f31d9e7b1d295d8929d7f953ec789b86c475ef828c0b74d35d5ae4": {
             "url": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-aarch64-baseos-n9.0-20220208/Packages/python3-pip-wheel-21.2.3-6.el9.noarch.rpm"
           },
-          "sha256:6979fe9b8acfb7e3d4aebb551789e1258d7cc5109a4efb59898b9cb94e470a8b": {
-            "url": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-aarch64-appstream-n9.0-20220208/Packages/qemu-guest-agent-6.2.0-5.el9.aarch64.rpm"
-          },
           "sha256:69b20a900c231a1a30629e42d1864aaf9a32ede4a7e8ad39c9d560201d5cf2ca": {
             "url": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-aarch64-baseos-n9.0-20220208/Packages/dracut-squash-055-10.git20210824.el9.aarch64.rpm"
           },
@@ -3189,9 +3180,6 @@
           },
           "sha256:a3701fe9260c9e076b6b408bd901951121d38e4c3d3c6c52dadea59a286d1e39": {
             "url": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-aarch64-baseos-n9.0-20220208/Packages/libbrotli-1.0.9-6.el9.aarch64.rpm"
-          },
-          "sha256:a39000b7f3c60b35d32b1e57b29ad76cdafcf7e4a069b1fffed1ac670e4d6e86": {
-            "url": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-aarch64-baseos-n9.0-20220208/Packages/dracut-config-rescue-055-10.git20210824.el9.aarch64.rpm"
           },
           "sha256:a45df628baddcbc033ba3d55f319ce13f57a2ef615a2a9c9aa11217bf3b273d3": {
             "url": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-aarch64-baseos-n9.0-20220208/Packages/openssh-8.7p1-6.el9.aarch64.rpm"
@@ -6068,15 +6056,6 @@
         "arch": "aarch64",
         "remote_location": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-aarch64-baseos-n9.0-20220208/Packages/dracut-config-generic-055-10.git20210824.el9.aarch64.rpm",
         "checksum": "sha256:6d564871ff46b3e8a0fc5e78fc17a950af1d291397eca19ffe9beb1e97e29f70"
-      },
-      {
-        "name": "dracut-config-rescue",
-        "epoch": 0,
-        "version": "055",
-        "release": "10.git20210824.el9",
-        "arch": "aarch64",
-        "remote_location": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-aarch64-baseos-n9.0-20220208/Packages/dracut-config-rescue-055-10.git20210824.el9.aarch64.rpm",
-        "checksum": "sha256:a39000b7f3c60b35d32b1e57b29ad76cdafcf7e4a069b1fffed1ac670e4d6e86"
       },
       {
         "name": "dracut-network",
@@ -9245,15 +9224,6 @@
         "arch": "noarch",
         "remote_location": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-aarch64-appstream-n9.0-20220208/Packages/python3-pytz-2021.1-4.el9.noarch.rpm",
         "checksum": "sha256:6d854c991181c69bf0c08d075ecf15e404d17611bddf66e0b7c749abe543aafa"
-      },
-      {
-        "name": "qemu-guest-agent",
-        "epoch": 17,
-        "version": "6.2.0",
-        "release": "5.el9",
-        "arch": "aarch64",
-        "remote_location": "https://rpmrepo.osbuild.org/v2/mirror/rhvpn/el9/el9-aarch64-appstream-n9.0-20220208/Packages/qemu-guest-agent-6.2.0-5.el9.aarch64.rpm",
-        "checksum": "sha256:6979fe9b8acfb7e3d4aebb551789e1258d7cc5109a4efb59898b9cb94e470a8b"
       },
       {
         "name": "rpm-plugin-systemd-inhibit",
