@@ -227,7 +227,6 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 				},
 			},
 			{
-				Size: 2 * 1024 * 1024 * 1024, // 2 GiB
 				Type: disk.FilesystemDataGUID,
 				UUID: disk.RootPartitionUUID,
 				Payload: &disk.LUKSContainer{
@@ -249,7 +248,7 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 						Description: "built with lvm2 and osbuild",
 						LogicalVolumes: []disk.LVMLogicalVolume{
 							{
-								Size: 8 * 1024 * 1024 * 1024, // 9 GB
+								Size: 9.5 * 1024 * 1024 * 1024, // 9 GB
 								Name: "rootlv",
 								Payload: &disk.Filesystem{
 									Type:         "xfs",
@@ -298,7 +297,6 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 				},
 			},
 			{
-				Size: 2 * 1024 * 1024 * 1024, // 2 GiB
 				Type: disk.FilesystemDataGUID,
 				UUID: disk.RootPartitionUUID,
 				Payload: &disk.LUKSContainer{
@@ -320,7 +318,7 @@ var edgeBasePartitionTables = distro.BasePartitionTableMap{
 						Description: "built with lvm2 and osbuild",
 						LogicalVolumes: []disk.LVMLogicalVolume{
 							{
-								Size: 8 * 1024 * 1024 * 1024, // 9.5 GB
+								Size: 9.5 * 1024 * 1024 * 1024, // 9.5 GB
 								Name: "rootlv",
 								Payload: &disk.Filesystem{
 									Type:         "xfs",
