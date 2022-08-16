@@ -151,8 +151,8 @@ esac
 # modify existing kickstart by prepending and appending commands
 function modksiso {
     sudo dnf install -y lorax  # for mkksiso
-    isomount=$(mktemp -d)
-    kspath=$(mktemp -d)
+    isomount=$(mktemp -d --tmpdir=/var/tmp/)
+    kspath=$(mktemp -d --tmpdir=/var/tmp/)
 
     iso="$1"
     newiso="$2"
@@ -196,9 +196,9 @@ EOFKS
 
     echo "Writing new ISO"
     if [ "${ID}" != "fedora" ] && nvrGreaterOrEqual "lorax" "34.9.18"; then
-        sudo mkksiso -c "console=ttyS0,115200" --ks "${newksfile}" "${iso}" "${newiso}"
+        sudo TMPDIR="/var/tmp/" mkksiso -c "console=ttyS0,115200" --ks "${newksfile}" "${iso}" "${newiso}"
     else
-        sudo mkksiso -c "console=ttyS0,115200" "${newksfile}" "${iso}" "${newiso}"
+        sudo TMPDIR="/var/tmp/" mkksiso -c "console=ttyS0,115200" "${newksfile}" "${iso}" "${newiso}"
     fi
 
     echo "==== NEW KICKSTART FILE ===="
@@ -574,7 +574,7 @@ EOF
 
 # Test IoT/Edge OS
 greenprint "📼 Run Edge tests on UEFI VM"
-sudo ansible-playbook -v -i "${TEMPDIR}"/inventory -e image_type="$OSTREE_OSNAME" -e ostree_commit="${INSTALL_HASH}" -e embeded_container="true" /usr/share/tests/osbuild-composer/ansible/check_ostree.yaml || RESULTS=0
+sudo ansible-playbook -v -i "${TEMPDIR}"/inventory -e image_type="$OSTREE_OSNAME" -e ostree_commit="${INSTALL_HASH}" -e embeded_container="${EMBEDED_CONTAINER}" /usr/share/tests/osbuild-composer/ansible/check_ostree.yaml || RESULTS=0
 
 # Check image installation result
 check_result
@@ -716,7 +716,7 @@ ansible_ssh_common_args="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/
 EOF
 
 # Test IoT/Edge OS
-sudo ansible-playbook -v -i "${TEMPDIR}"/inventory -e image_type="$OSTREE_OSNAME" -e ostree_commit="${UPGRADE_HASH}" -e embeded_container="true" /usr/share/tests/osbuild-composer/ansible/check_ostree.yaml || RESULTS=0
+sudo ansible-playbook -v -i "${TEMPDIR}"/inventory -e image_type="$OSTREE_OSNAME" -e ostree_commit="${UPGRADE_HASH}" -e embeded_container="${EMBEDED_CONTAINER}" /usr/share/tests/osbuild-composer/ansible/check_ostree.yaml || RESULTS=0
 check_result
 
 # Final success clean up

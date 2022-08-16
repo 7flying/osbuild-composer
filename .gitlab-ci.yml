@@ -17,6 +17,7 @@ stages:
     - schutzbot/save_journal.sh || true
     - schutzbot/upload_artifacts.sh
   interruptible: true
+  retry: 1
   tags:
     - terraform
   artifacts:
@@ -38,6 +39,7 @@ stages:
 
 init:
   stage: init
+  interruptible: true
   tags:
     - shell
   script:
@@ -142,7 +144,6 @@ Prepare-rhel-internal:
     paths:
       - rhel-${RHEL_MAJOR}.json
       - rhel${RHEL_MAJOR}internal.repo
-      - rhel-${RHEL_MAJOR}-beta.json
       - COMPOSE_ID
   parallel:
     matrix:
@@ -321,7 +322,7 @@ OSTree:
           - rhos-01/rhel-8.4-ga-x86_64
           - rhos-01/rhel-8.6-ga-x86_64
           - rhos-01/rhel-9.0-ga-x86_64
-          - rhos-01/rhel-8.7-nightly-x86_64-large
+          - rhos-01/rhel-8.7-nightly-x86_64
           - rhos-01/rhel-9.1-nightly-x86_64
           - rhos-01/centos-stream-8-x86_64
           - rhos-01/centos-stream-9-x86_64
@@ -335,12 +336,12 @@ New OSTree:
   parallel:
     matrix:
       - RUNNER:
-          - rhos-01/fedora-35-x86_64-large
-          # - rhos-01/fedora-36-x86_64-large
-          - rhos-01/rhel-8.7-nightly-x86_64-large
-          - rhos-01/rhel-9.1-nightly-x86_64-large
-          - rhos-01/centos-stream-8-x86_64-large
-          - rhos-01/centos-stream-9-x86_64-large
+          - rhos-01/fedora-35-x86_64
+          # - rhos-01/fedora-36-x86_64
+          - rhos-01/rhel-8.7-nightly-x86_64
+          - rhos-01/rhel-9.1-nightly-x86_64
+          - rhos-01/centos-stream-8-x86_64
+          - rhos-01/centos-stream-9-x86_64
 
 OSTree simplified installer:
   stage: test
@@ -351,10 +352,10 @@ OSTree simplified installer:
   parallel:
     matrix:
       - RUNNER:
-          - rhos-01/rhel-8.7-nightly-x86_64-large
-          - rhos-01/centos-stream-8-x86_64-large
-          - rhos-01/rhel-9.1-nightly-x86_64-large
-          - rhos-01/centos-stream-9-x86_64-large
+          - rhos-01/rhel-8.7-nightly-x86_64
+          - rhos-01/centos-stream-8-x86_64
+          - rhos-01/rhel-9.1-nightly-x86_64
+          - rhos-01/centos-stream-9-x86_64
 
 OSTree raw image:
   stage: test
@@ -371,24 +372,38 @@ OSTree raw image:
   parallel:
     matrix:
       - RUNNER:
-          - rhos-01/rhel-8.7-nightly-x86_64-large
-          - rhos-01/centos-stream-8-x86_64-large
-          - rhos-01/rhel-9.1-nightly-x86_64-large
-          - rhos-01/centos-stream-9-x86_64-large
+          - rhos-01/rhel-8.7-nightly-x86_64
+          - rhos-01/centos-stream-8-x86_64
+          - rhos-01/rhel-9.1-nightly-x86_64
+          - rhos-01/centos-stream-9-x86_64
 
-Rebase OSTree:
+Rebase OSTree BIOS:
   stage: test
   extends: OSTree
   script:
     - schutzbot/deploy.sh
-    - /usr/libexec/tests/osbuild-composer/ostree-rebase.sh
+    - /usr/libexec/tests/osbuild-composer/ostree-rebase-bios.sh
   parallel:
     matrix:
       - RUNNER:
-          - rhos-01/rhel-8.7-nightly-x86_64-large
-          - rhos-01/rhel-9.1-nightly-x86_64-large
-          - rhos-01/centos-stream-8-x86_64-large
-          - rhos-01/centos-stream-9-x86_64-large
+          - rhos-01/rhel-8.7-nightly-x86_64
+          - rhos-01/rhel-9.1-nightly-x86_64
+          - rhos-01/centos-stream-8-x86_64
+          - rhos-01/centos-stream-9-x86_64
+
+Rebase OSTree UEFI:
+  stage: test
+  extends: OSTree
+  script:
+    - schutzbot/deploy.sh
+    - /usr/libexec/tests/osbuild-composer/ostree-rebase-uefi.sh
+  parallel:
+    matrix:
+      - RUNNER:
+          - rhos-01/rhel-8.7-nightly-x86_64
+          - rhos-01/rhel-9.1-nightly-x86_64
+          - rhos-01/centos-stream-8-x86_64
+          - rhos-01/centos-stream-9-x86_64
 
 .integration_base:
   stage: test
@@ -616,8 +631,8 @@ OpenSCAP:
   parallel:
     matrix:
       - RUNNER:
-          - rhos-01/rhel-8.7-nightly-x86_64-large
-          - rhos-01/rhel-9.1-nightly-x86_64-large
+          - rhos-01/rhel-8.7-nightly-x86_64
+          - rhos-01/rhel-9.1-nightly-x86_64
 
 Upgrade:
   stage: test

@@ -29,10 +29,6 @@ const (
 	blueprintPkgsKey = "blueprint"
 )
 
-var mountpointAllowList = []string{
-	"/", "/var", "/opt", "/srv", "/usr", "/app", "/data", "/home", "/tmp",
-}
-
 // RHEL-based OS image configuration defaults
 var defaultDistroImageConfig = &distro.ImageConfig{
 	Timezone: "America/New_York",
@@ -437,15 +433,9 @@ func (t *imageType) checkOptions(customizations *blueprint.Customizations, optio
 
 	mountpoints := customizations.GetFilesystems()
 
-	invalidMountpoints := []string{}
-	for _, m := range mountpoints {
-		if !distro.IsMountpointAllowed(m.Mountpoint, mountpointAllowList) {
-			invalidMountpoints = append(invalidMountpoints, m.Mountpoint)
-		}
-	}
-
-	if len(invalidMountpoints) > 0 {
-		return fmt.Errorf("The following custom mountpoints are not supported %+q", invalidMountpoints)
+	err := disk.CheckMountpoints(mountpoints, disk.MountpointPolicies)
+	if err != nil {
+		return err
 	}
 
 	if osc := customizations.GetOpenSCAP(); osc != nil {

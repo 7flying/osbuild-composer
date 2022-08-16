@@ -39,10 +39,6 @@ const (
 )
 
 var (
-	mountpointAllowList = []string{
-		"/", "/var", "/opt", "/srv", "/usr", "/app", "/data", "/home", "/tmp",
-	}
-
 	// rhel9 & cs9 share the same list
 	// of allowed profiles so a single
 	// allow list can be used
@@ -603,15 +599,9 @@ func (t *imageType) checkOptions(customizations *blueprint.Customizations, optio
 		return fmt.Errorf("Custom mountpoints are not supported for ostree types")
 	}
 
-	invalidMountpoints := []string{}
-	for _, m := range mountpoints {
-		if !distro.IsMountpointAllowed(m.Mountpoint, mountpointAllowList) {
-			invalidMountpoints = append(invalidMountpoints, m.Mountpoint)
-		}
-	}
-
-	if len(invalidMountpoints) > 0 {
-		return fmt.Errorf("The following custom mountpoints are not supported %+q", invalidMountpoints)
+	err := disk.CheckMountpoints(mountpoints, disk.MountpointPolicies)
+	if err != nil {
+		return err
 	}
 
 	if osc := customizations.GetOpenSCAP(); osc != nil {
