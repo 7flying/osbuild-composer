@@ -24,7 +24,7 @@ func edgeImagePipelines(t *imageType, customizations *blueprint.Customizations, 
 	}
 
 	// prepare ostree deployment tree
-	treePipeline := ostreeDeployPipeline(t, partitionTable, ostreeRepoPath, rng, customizations, options)
+	treePipeline := ostreeDeployPipeline(t, partitionTable, ostreeRepoPath, rng, customizations, options, true)
 	pipelines = append(pipelines, *treePipeline)
 
 	// make raw image from tree
@@ -204,6 +204,7 @@ func ostreeDeployPipeline(
 	rng *rand.Rand,
 	c *blueprint.Customizations,
 	options distro.ImageOptions,
+	ignition bool,
 ) *osbuild.Pipeline {
 
 	p := new(osbuild.Pipeline)
@@ -228,6 +229,13 @@ func ostreeDeployPipeline(
 	kernelOpts = append(kernelOpts, "rw")
 	if bpKernel := c.GetKernel(); bpKernel.Append != "" {
 		kernelOpts = append(kernelOpts, bpKernel.Append)
+	}
+	if ignition {
+		kernelOpts = append(kernelOpts,
+			"coreos.no_persist_ip", // users cannot add connections as we don't have a live iso, this prevents connections to bleed into the system from the ign initrd
+			"ignition.platform.id=metal",
+			"$ignition_firstboot",
+		)
 	}
 	p.AddStage(osbuild.NewOSTreeDeployStage(
 		&osbuild.OSTreeDeployStageOptions{
@@ -288,7 +296,10 @@ func ostreeDeployPipeline(
 		p.AddStage(groupsStage)
 	}
 
-	p.AddStage(bootloaderConfigStage(t, *pt, "", true, true))
+	if ignition {
+		p.AddStage(osbuild.NewIgnitionStage(&osbuild.IgnitionStageOptions{}))
+	}
+	p.AddStage(bootloaderConfigStage(t, *pt, "", true, true, ignition))
 
 	p.AddStage(osbuild.NewOSTreeSelinuxStage(
 		&osbuild.OSTreeSelinuxStageOptions{
@@ -348,7 +359,7 @@ func xzArchivePipeline(inputPipelineName, inputFilename, outputFilename string) 
 	return p
 }
 
-func bootloaderConfigStage(t *imageType, partitionTable disk.PartitionTable, kernelVer string, install, greenboot bool) *osbuild.Stage {
+func bootloaderConfigStage(t *imageType, partitionTable disk.PartitionTable, kernelVer string, install, greenboot, ignition bool) *osbuild.Stage {
 	if t.Arch().Name() == distro.S390xArchName {
 		return osbuild.NewZiplStage(new(osbuild.ZiplStageOptions))
 	}
@@ -358,6 +369,7 @@ func bootloaderConfigStage(t *imageType, partitionTable disk.PartitionTable, ker
 
 	options := osbuild.NewGrub2StageOptionsUnified(&partitionTable, kernelVer, uefi, legacy, t.arch.distro.vendor, install)
 	options.Greenboot = greenboot
+	options.Ignition = ignition
 
 	return osbuild.NewGRUB2Stage(options)
 }
