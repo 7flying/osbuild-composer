@@ -42,7 +42,9 @@ func TestSystemdJournaldStage_MarshalJSON_Invalid(t *testing.T) {
 			assert.NotNilf(t, err, "json.Marshall() didn't return an error, but: %s [idx: %d]", string(gotBytes), idx)
 		})
 	}
+}
 
+func TestSystemdJournaldStage_MarshalJSON_Valid(t *testing.T) {
 	testOk := SystemdJournaldStageOptions{
 		Filename: "20-another-file.conf",
 		Config: SystemdJournaldConfigDropin{
