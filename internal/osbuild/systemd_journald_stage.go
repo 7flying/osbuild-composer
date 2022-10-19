@@ -23,6 +23,16 @@ type SystemdJournaldConfigDropin struct {
 	Journal SystemdJournaldConfigJournalSection `json:"Journal"`
 }
 
+type systemdJournaldConfigDropin SystemdJournaldConfigDropin
+
+func (s SystemdJournaldConfigDropin) MarshalJSON() ([]byte, error) {
+	if s.Journal == (SystemdJournaldConfigJournalSection{}) {
+		return nil, fmt.Errorf("the 'Journal' section is required")
+	}
+	journalSection := systemdJournaldConfigDropin(s)
+	return json.Marshal(journalSection)
+}
+
 // 'Journal' configuration section, at least one option must be specified
 type SystemdJournaldConfigJournalSection struct {
 	// Controls where to store journal data.
@@ -47,7 +57,7 @@ type SystemdJournaldConfigJournalSection struct {
 
 type systemdJournaldConfigJournalSection SystemdJournaldConfigJournalSection
 
-func (s systemdJournaldConfigJournalSection) MarshalJSON() ([]byte, error) {
+func (s SystemdJournaldConfigJournalSection) MarshalJSON() ([]byte, error) {
 	if s.Storage == nil && s.Compress == nil && s.SplitMode == nil && s.MaxFileSec == nil && s.MaxRetentionSec == nil && s.SyncIntervalSec == nil {
 		return nil, fmt.Errorf("at least one 'Journal' section option must be specified")
 	}
