@@ -48,7 +48,7 @@ type SystemdJournaldConfigJournalSection struct {
 type systemdJournaldConfigJournalSection SystemdJournaldConfigJournalSection
 
 func (s systemdJournaldConfigJournalSection) MarshalJSON() ([]byte, error) {
-	if s == (systemdJournaldConfigJournalSection{}) {
+	if s.Storage == nil && s.Compress == nil && s.SplitMode == nil && s.MaxFileSec == nil && s.MaxRetentionSec == nil && s.SyncIntervalSec == nil {
 		return nil, fmt.Errorf("at least one 'Journal' section option must be specified")
 	}
 	journalSection := systemdJournaldConfigJournalSection(s)
