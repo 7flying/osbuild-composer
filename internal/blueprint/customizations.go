@@ -23,6 +23,21 @@ type Customizations struct {
 	InstallationDevice string                    `json:"installation_device,omitempty" toml:"installation_device,omitempty"`
 	FDO                *FDOCustomization         `json:"fdo,omitempty" toml:"fdo,omitempty"`
 	OpenSCAP           *OpenSCAPCustomization    `json:"openscap,omitempty" toml:"openscap,omitempty"`
+	Ignition           *IgnitionCustomization    `json:"ignition,omitempty" toml:"ignition,omitempty"`
+}
+
+type IgnitionCustomization struct {
+	Embedded  *EmbeddedIgnitionCustomization  `json:"embedded,omitempty" toml:"embedded,omitempty"`
+	FirstBoot *FirstBootIgnitionCustomization `json:"firstboot,omitempty" toml:"firstboot,omitempty"`
+}
+
+type EmbeddedIgnitionCustomization struct {
+	ProvisioningURL string `json:"url,omitempty" toml:"url,omitempty"`
+	Data64          string `json:"ignition_data,omitempty" toml:"ignition_data,omitempty"`
+}
+
+type FirstBootIgnitionCustomization struct {
+	ProvisioningURL string `json:"url,omitempty" toml:"url"`
 }
 
 type FDOCustomization struct {
@@ -162,8 +177,8 @@ func (e *CustomizationError) Error() string {
 	return e.Message
 }
 
-//CheckCustomizations returns an error of type `CustomizationError`
-//if `c` has any customizations not specified in `allowed`
+// CheckCustomizations returns an error of type `CustomizationError`
+// if `c` has any customizations not specified in `allowed`
 func (c *Customizations) CheckAllowed(allowed ...string) error {
 	if c == nil {
 		return nil
@@ -383,4 +398,23 @@ func (c *Customizations) GetOpenSCAP() *OpenSCAPCustomization {
 
 func (f *FDOCustomization) HasFDO() bool {
 	return f != nil
+}
+
+func (c *Customizations) GetIgnition() *IgnitionCustomization {
+	if c == nil {
+		return nil
+	}
+	return c.Ignition
+}
+
+func (c *IgnitionCustomization) HasIgnition() bool {
+	return c != nil
+}
+
+func (c *EmbeddedIgnitionCustomization) CheckEmbeddedIgnition() error {
+	if c.Data64 != "" && c.ProvisioningURL != "" {
+		t := reflect.TypeOf(*c)
+		return &CustomizationError{fmt.Sprintf("'%s' and '%s' are not allowed at the same time", t.Field(0).Name, t.Field(1).Name)}
+	}
+	return nil
 }
