@@ -1,6 +1,7 @@
 package rhel9
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"math/rand"
 	"path"
@@ -195,8 +196,8 @@ func tarPipelines(t *imageType, customizations *blueprint.Customizations, option
 	return pipelines, nil
 }
 
-//makeISORootPath return a path that can be used to address files and folders in
-//the root of the iso
+// makeISORootPath return a path that can be used to address files and folders in
+// the root of the iso
 func makeISORootPath(p string) string {
 	fullpath := path.Join("/run/install/repo", p)
 	return fmt.Sprintf("file://%s", fullpath)
@@ -778,7 +779,7 @@ func edgeSimplifiedInstallerPipelines(t *imageType, customizations *blueprint.Cu
 	installerTreePipeline := simplifiedInstallerTreePipeline(repos, installerPackages, kernelVer, archName, d.product, d.osVersion, "edge", customizations.GetFDO(), customizations.GetIgnition())
 	isolabel := fmt.Sprintf(d.isolabelTmpl, archName)
 	efibootTreePipeline := simplifiedInstallerEFIBootTreePipeline(installDevice, kernelVer, archName, d.vendor, d.product, d.osVersion, isolabel, customizations.GetFDO(), customizations.GetIgnition())
-	bootISOTreePipeline := simplifiedInstallerBootISOTreePipeline(imgPipelineName, kernelVer, rng)
+	bootISOTreePipeline := simplifiedInstallerBootISOTreePipeline(imgPipelineName, kernelVer, rng, customizations.GetIgnition())
 
 	pipelines = append(pipelines, *installerTreePipeline, *efibootTreePipeline, *bootISOTreePipeline)
 	pipelines = append(pipelines, *bootISOPipeline(t.Filename(), d.isolabelTmpl, t.Arch().Name(), false))
@@ -786,7 +787,7 @@ func edgeSimplifiedInstallerPipelines(t *imageType, customizations *blueprint.Cu
 	return pipelines, nil
 }
 
-func simplifiedInstallerBootISOTreePipeline(archivePipelineName, kver string, rng *rand.Rand) *osbuild.Pipeline {
+func simplifiedInstallerBootISOTreePipeline(archivePipelineName, kver string, rng *rand.Rand, ignition *blueprint.IgnitionCustomization) *osbuild.Pipeline {
 	p := new(osbuild.Pipeline)
 	p.Name = "bootiso-tree"
 	p.Build = "name:build"
@@ -802,6 +803,24 @@ func simplifiedInstallerBootISOTreePipeline(archivePipelineName, kver string, rn
 		},
 		osbuild.NewFilesInputs(osbuild.NewFilesInputReferencesPipeline(archivePipelineName, "disk.img.xz")),
 	))
+
+	if ignition.HasIgnition() && ignition.Embedded != nil {
+		cso := osbuild.CopyStageOptions{}
+		filename := ""
+		copyInput := ""
+		if ignition.Embedded.Data64 != "" {
+			filename = "ignition_config"
+			copyInput = ignition.Embedded.Data64
+		} else {
+			filename = "ignition_url"
+			copyInput = ignition.Embedded.ProvisioningURL
+		}
+		cso.Paths = append(cso.Paths, osbuild.CopyStagePath{
+			From: fmt.Sprintf("input://inlinefile/sha256:%x", sha256.Sum256([]byte(copyInput))),
+			To:   fmt.Sprintf("tree:///%s", filename),
+		})
+		p.AddStage(osbuild.NewCopyStageSimple(&cso, osbuild.NewIgnitionInlineInput(copyInput)))
+	}
 
 	p.AddStage(osbuild.NewMkdirStage(
 		&osbuild.MkdirStageOptions{
@@ -904,7 +923,8 @@ func simplifiedInstallerTreePipeline(repos []rpmmd.RepoConfig, packages []rpmmd.
 	}
 
 	if ignition.HasIgnition() {
-		dracutStageOptions.Modules = append(dracutStageOptions.Modules, "ignition-edge")
+		// TODO(edge): when the dracut module is available, add it here
+		// dracutStageOptions.Modules = append(dracutStageOptions.Modules, "ignition-edge")
 	}
 
 	p.AddStage(osbuild.NewDracutStage(dracutStageOptions))
