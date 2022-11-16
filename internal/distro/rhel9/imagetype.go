@@ -385,6 +385,15 @@ func (t *imageType) Manifest(customizations *blueprint.Customizations,
 		inlineData = append(inlineData, fdo.DiunPubKeyRootCerts)
 	}
 
+	// Check if we have an embedded ignition file
+	if ignition := customizations.GetIgnition(); ignition != nil && ignition.Embedded != nil {
+		if ignition.Embedded.Data64 != "" {
+			inlineData = append(inlineData, ignition.Embedded.Data64)
+		} else {
+			inlineData = append(inlineData, ignition.Embedded.ProvisioningURL)
+		}
+	}
+
 	return json.Marshal(
 		osbuild.Manifest{
 			Version:   "2",
