@@ -31,6 +31,7 @@
       }
     }
   },
+  "no-image-info": true,
   "manifest": {
     "version": "2",
     "pipelines": [
@@ -1001,7 +1002,7 @@
               "repo": "/ostree/repo",
               "config": {
                 "sysroot": {
-                  "readonly": false,
+                  "readonly": true,
                   "bootloader": "none"
                 }
               }
@@ -1032,7 +1033,8 @@
                 "label": "root"
               },
               "kernel_opts": [
-                "luks.uuid=6e4ff95f-f662-45ee-a82a-bdf44a2d0b75"
+                "luks.uuid=6e4ff95f-f662-45ee-a82a-bdf44a2d0b75",
+                "rw"
               ]
             }
           },
@@ -12709,6 +12711,5 @@
         "checksum": "sha256:340b3c65becfca3d39f2afeed9659505a33ee870270c4d115d9fefe8929ff806"
       }
     ]
-  },
-  "no-image-info": true
+  }
 }
