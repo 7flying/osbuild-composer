@@ -242,6 +242,17 @@ func edgeCommitPackageSet(t *imageType) rpmmd.PackageSet {
 				"fdo-client",
 				"fdo-owner-cli",
 				"greenboot-default-health-checks",
+				// debugging tools:
+				// redhat-support-tool vim-minimal tcpdump mtr strace telnet
+				// procps-ng traceroute nmap-ncat iputils iproute bpftool
+				"sos",
+				"redhat-support-tool",
+				"tcp-dump",
+				"mtr",
+				"strace",
+				"telnet",
+				"nmap-ncat",
+				"bpftool",
 			},
 		})
 	}
