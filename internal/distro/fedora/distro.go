@@ -150,6 +150,28 @@ var (
 		exports:          []string{"bootiso"},
 	}
 
+	iotSimplifiedInstallerImgType = imageType{
+		name:        "iot-simplified-installer",
+		nameAliases: []string{"fedora-iot-simplified-installer"},
+		filename:    "simplified-installer.iso",
+		mimeType:    "application/x-iso9660-image",
+		packageSets: map[string]packageSetFunc{
+			installerPkgsKey: iotSimplifiedInstallerPackageSet,
+		},
+		defaultImageConfig: &distro.ImageConfig{
+			EnabledServices: iotServices,
+		},
+		defaultSize:         10 * common.GibiByte,
+		rpmOstree:           true,
+		bootable:            true,
+		bootISO:             true,
+		image:               iotSimplifiedInstallerImage,
+		buildPipelines:      []string{"build"},
+		payloadPipelines:    []string{"image-tree", "image", "xz", "coi-tree", "efiboot-tree", "bootiso-tree", "bootiso"},
+		exports:             []string{"bootiso"},
+		basePartitionTables: iotBasePartitionTables,
+	}
+
 	iotRawImgType = imageType{
 		name:        "iot-raw-image",
 		nameAliases: []string{"fedora-iot-raw-image"},
@@ -760,7 +782,45 @@ func (t *imageType) checkOptions(customizations *blueprint.Customizations, optio
 	// BootISO's have limited support for customizations.
 	// TODO: Support kernel name selection for image-installer
 	if t.bootISO {
-		if t.name == "iot-installer" || t.name == "image-installer" {
+		if t.name == "iot-simplified-installer" {
+			allowed := []string{"InstallationDevice", "FDO", "Ignition", "Kernel"}
+			if err := customizations.CheckAllowed(allowed...); err != nil {
+				return fmt.Errorf("unsupported blueprint customizations found for boot ISO image type %q: (allowed: %s)", t.name, strings.Join(allowed, ", "))
+			}
+			if customizations.GetInstallationDevice() == "" {
+				return fmt.Errorf("boot ISO image type %q requires specifying an installation device to install to", t.name)
+			}
+
+			// FDO is optional, but when specified has some restrictions
+			if customizations.GetFDO() != nil {
+				if customizations.GetFDO().ManufacturingServerURL == "" {
+					return fmt.Errorf("boot ISO image type %q requires specifying FDO.ManufacturingServerURL configuration to install to when using FDO", t.name)
+				}
+				var diunSet int
+				if customizations.GetFDO().DiunPubKeyHash != "" {
+					diunSet++
+				}
+				if customizations.GetFDO().DiunPubKeyInsecure != "" {
+					diunSet++
+				}
+				if customizations.GetFDO().DiunPubKeyRootCerts != "" {
+					diunSet++
+				}
+				if diunSet != 1 {
+					return fmt.Errorf("boot ISO image type %q requires specifying one of [FDO.DiunPubKeyHash,FDO.DiunPubKeyInsecure,FDO.DiunPubKeyRootCerts] configuration to install to when using FDO", t.name)
+				}
+			}
+
+			// ignition is optional, we might be using FDO
+			if customizations.Ignition.HasIgnition() {
+				if customizations.GetIgnition().Embedded != nil && customizations.GetIgnition().FirstBoot != nil {
+					return fmt.Errorf("both ignition embedded and firstboot configurations found")
+				}
+				if customizations.GetIgnition().FirstBoot != nil && customizations.GetIgnition().FirstBoot.ProvisioningURL == "" {
+					return fmt.Errorf("ignition.firstboot requires a provisioning url")
+				}
+			}
+		} else if t.name == "iot-installer" || t.name == "image-installer" {
 			allowed := []string{"User", "Group"}
 			if err := customizations.CheckAllowed(allowed...); err != nil {
 				return fmt.Errorf("unsupported blueprint customizations found for boot ISO image type %q: (allowed: %s)", t.name, strings.Join(allowed, ", "))
@@ -926,6 +986,16 @@ func newDistro(version int) distro.Distro {
 		},
 		iotRawImgType,
 	)
+	x86_64.addImageTypes(
+		&platform.X86{
+			BasePlatform: platform.BasePlatform{
+				ImageFormat: platform.FORMAT_RAW,
+			},
+			BIOS:       false,
+			UEFIVendor: "fedora",
+		},
+		iotSimplifiedInstallerImgType,
+	)
 	aarch64.addImageTypes(
 		&platform.Aarch64{
 			UEFIVendor: "fedora",
@@ -973,6 +1043,7 @@ func newDistro(version int) distro.Distro {
 		iotCommitImgType,
 		iotOCIImgType,
 		iotInstallerImgType,
+		iotSimplifiedInstallerImgType,
 		imageInstallerImgType,
 	)
 	aarch64.addImageTypes(

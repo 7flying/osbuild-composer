@@ -177,7 +177,7 @@ func TestImageTypePipelineNames(t *testing.T) {
 
 					// set up bare minimum args for image type
 					customizations := &blueprint.Customizations{}
-					if imageType.Name() == "edge-simplified-installer" {
+					if imageType.Name() == "edge-simplified-installer" || imageType.Name() == "iot-simplified-installer" {
 						customizations = &blueprint.Customizations{
 							InstallationDevice: "/dev/null",
 						}
