@@ -142,12 +142,13 @@ var (
 			Locale:          common.ToPtr("en_US.UTF-8"),
 			EnabledServices: iotServices,
 		},
-		rpmOstree:        true,
-		bootISO:          true,
-		image:            iotInstallerImage,
-		buildPipelines:   []string{"build"},
-		payloadPipelines: []string{"anaconda-tree", "rootfs-image", "efiboot-tree", "bootiso-tree", "bootiso"},
-		exports:          []string{"bootiso"},
+		rpmOstree:           true,
+		bootISO:             true,
+		image:               iotInstallerImage,
+		buildPipelines:      []string{"build"},
+		payloadPipelines:    []string{"anaconda-tree", "rootfs-image", "efiboot-tree", "bootiso-tree", "bootiso"},
+		exports:             []string{"bootiso"},
+		basePartitionTables: iotBasePartitionTables,
 	}
 
 	iotSimplifiedInstallerImgType = imageType{
@@ -169,7 +170,7 @@ var (
 		buildPipelines:      []string{"build"},
 		payloadPipelines:    []string{"image-tree", "image", "xz", "coi-tree", "efiboot-tree", "bootiso-tree", "bootiso"},
 		exports:             []string{"bootiso"},
-		basePartitionTables: iotBasePartitionTables,
+		basePartitionTables: iotSimplifiedInstallerPartitionTables,
 	}
 
 	iotRawImgType = imageType{
