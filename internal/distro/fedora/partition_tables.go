@@ -223,7 +223,7 @@ var iotSimplifiedInstallerPartitionTables = distro.BasePartitionTableMap{
 			},
 			{
 				Size: 1 * common.GibiByte, // 1 GiB
-				Type: disk.FilesystemDataGUID,
+				Type: disk.XBootLDRPartitionGUID,
 				UUID: disk.FilesystemDataUUID,
 				Payload: &disk.Filesystem{
 					Type:         "ext4",
