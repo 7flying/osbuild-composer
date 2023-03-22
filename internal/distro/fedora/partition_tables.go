@@ -231,7 +231,7 @@ var iotSimplifiedInstallerPartitionTables = distro.BasePartitionTableMap{
 					Label:        "boot",
 					FSTabOptions: "defaults",
 					FSTabFreq:    1,
-					FSTabPassNo:  2,
+					FSTabPassNo:  1,
 				},
 			},
 			{
