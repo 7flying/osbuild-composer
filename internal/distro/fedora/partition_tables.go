@@ -245,7 +245,8 @@ var iotSimplifiedInstallerPartitionTables = distro.BasePartitionTableMap{
 						Description: "built with lvm2 and osbuild",
 						LogicalVolumes: []disk.LVMLogicalVolume{
 							{
-								Size: 2569 * common.MebiByte, // 2.5 GiB
+							        Size: 2 * 1024 * 1024, // 2 GB
+								//Size: 2569 * common.MebiByte, // 2.5 GiB
 								Name: "rootlv",
 								//Type: disk.FilesystemDataGUID, //remove
 								//UUID: disk.RootPartitionUUID,  // remove
