@@ -8,6 +8,7 @@ import (
 
 	"github.com/osbuild/osbuild-composer/internal/common"
 	"github.com/osbuild/osbuild-composer/internal/distro"
+	"github.com/osbuild/osbuild-composer/internal/environment"
 	"github.com/osbuild/osbuild-composer/internal/osbuild"
 	"github.com/osbuild/osbuild-composer/internal/oscap"
 	"github.com/osbuild/osbuild-composer/internal/platform"
@@ -293,6 +294,11 @@ func newDistro(name string, minor int) *distribution {
 		mkGCEImageType(rd.isRHEL()),
 	)
 
+	edgeAmiImgType.name = "edge-ami"
+	edgeAmiImgType.nameAliases = []string{}
+	edgeAmiImgType.environment = &environment.EC2{}
+	edgeAmiImgType.exports = []string{"image"}
+
 	x86_64.addImageTypes(
 		&platform.X86{
 			BasePlatform: platform.BasePlatform{
@@ -318,6 +324,7 @@ func newDistro(name string, minor int) *distribution {
 		edgeInstallerImgType,
 		edgeRawImgType,
 		imageInstaller,
+		edgeAmiImgType,
 	)
 
 	x86_64.addImageTypes(
@@ -370,6 +377,7 @@ func newDistro(name string, minor int) *distribution {
 			UEFIVendor: rd.vendor,
 		},
 		edgeRawImgType,
+		edgeAmiImgType,
 	)
 
 	aarch64.addImageTypes(

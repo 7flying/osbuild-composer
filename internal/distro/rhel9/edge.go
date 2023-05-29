@@ -129,6 +129,10 @@ var (
 		basePartitionTables: edgeBasePartitionTables,
 	}
 
+	// The 'edge-ami' image type is an uncompressed 'edge-raw-image' image type,
+	// see the distro constructor on distro.go for the rest of the fields
+	edgeAmiImgType = edgeRawImgType
+
 	// Shared Services
 	edgeServices = []string{
 		// TODO(runcom): move fdo-client-linuxapp.service to presets?
